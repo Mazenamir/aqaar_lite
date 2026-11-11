@@ -56,6 +56,7 @@ export function PaymentsView({ onNavigateTab: _onNavigateTab }: PaymentsViewProp
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string>("شركة الرياض");
+  const [currentUserRole, setCurrentUserRole] = useState<string>("");
 
   // Search & Filter
   const [search, setSearch] = useState("");
@@ -87,6 +88,7 @@ export function PaymentsView({ onNavigateTab: _onNavigateTab }: PaymentsViewProp
       if (res.ok) {
         const json = await res.json();
         if (json.user?.companyName) setCompanyName(json.user.companyName);
+        if (json.user?.role) setCurrentUserRole(json.user.role);
       }
     } catch (e) {}
   };
@@ -282,13 +284,15 @@ interface RawContractItem {
 
         {/* Action & Utility Pills Row */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={handleOpenModal}
-            className="bg-[#064e3b] hover:bg-[#003527] text-white rounded-full px-4 py-2 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>+ تسجيل دفعة جديدة</span>
-          </button>
+          {currentUserRole === "ACCOUNTANT" && (
+            <button
+              onClick={handleOpenModal}
+              className="bg-[#064e3b] hover:bg-[#003527] text-white rounded-full px-4 py-2 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>+ تسجيل دفعة جديدة</span>
+            </button>
+          )}
 
           <div className="relative flex items-center">
             <input

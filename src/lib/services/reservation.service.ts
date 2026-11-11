@@ -1,5 +1,5 @@
 import { PrismaClient, UnitStatus, ReservationStatus, UserRole, Prisma } from "@prisma/client";
-import { ConflictError, NotFoundError, ForbiddenError } from "@/lib/errors/app-error";
+import { ConflictError, NotFoundError, ForbiddenError, ValidationError } from "@/lib/errors/app-error";
 import { formatSar } from "../money";
 
 export interface CreateReservationInput {
@@ -225,22 +225,42 @@ export class ReservationService {
     userId: string,
     userRole: UserRole
   ) {
+    return this.listReservations(prisma, companyId, userId, userRole, "ACTIVE");
+  }
+
+  /**
+   * Retrieves reservations with tenant isolation, role scoping, and optional status filtering.
+   */
+  public static async listReservations(
+    prisma: PrismaClient,
+    companyId: string,
+    userId: string,
+    userRole: UserRole,
+    statusFilter?: string
+  ) {
     await this.autoExpireReservations(prisma, companyId);
 
     const where: Prisma.ReservationWhereInput = {
       companyId,
-      status: ReservationStatus.ACTIVE,
-      expiresAt: { gt: new Date() },
-      contracts: {
-        none: {
-          status: { in: ["DRAFT", "APPROVED", "COMPLETED"] },
-        },
-      },
     };
 
     if (userRole === UserRole.SALES_AGENT) {
       where.createdById = userId;
     }
+
+    if (!statusFilter || statusFilter === "ACTIVE") {
+      where.status = ReservationStatus.ACTIVE;
+      where.expiresAt = { gt: new Date() };
+      where.contracts = {
+        none: {
+          status: { in: ["DRAFT", "APPROVED", "COMPLETED"] },
+        },
+      };
+    } else if (statusFilter === "EXPIRED") {
+      where.status = ReservationStatus.EXPIRED;
+    } else if (statusFilter === "CONVERTED") {
+      where.status = ReservationStatus.CONVERTED;
+    } // if "all", no status restriction applied
 
     const reservations = await prisma.reservation.findMany({
       where,
@@ -281,5 +301,71 @@ export class ReservationService {
       },
       agentName: r.createdBy.name,
     }));
+  }
+
+  /**
+   * Cancels an active reservation and safely returns the unit to AVAILABLE.
+   * Mandated transition: RESERVED -> AVAILABLE
+   */
+  public static async cancelReservation(
+    prisma: PrismaClient,
+    companyId: string,
+    reservationId: string,
+    userId: string,
+    userRole: UserRole
+  ) {
+    return await prisma.$transaction(async (tx) => {
+      const reservation = await tx.reservation.findFirst({
+        where: { id: reservationId, companyId },
+        include: { unit: true },
+      });
+
+      if (!reservation) {
+        throw new NotFoundError("الحجز غير موجود أو لا ينتمي لشركتك");
+      }
+
+      // Sales agent can only cancel their own reservations
+      if (userRole === UserRole.SALES_AGENT && reservation.createdById !== userId) {
+        throw new ForbiddenError("لا يحق لك إلغاء حجز تابع لمندوب آخر");
+      }
+
+      if (reservation.status !== ReservationStatus.ACTIVE) {
+        throw new ValidationError("لا يمكن إلغاء حجز غير نشط");
+      }
+
+      // 1. Transition reservation to EXPIRED (cancelled before expiration)
+      const updated = await tx.reservation.update({
+        where: { id: reservationId },
+        data: { status: ReservationStatus.EXPIRED },
+      });
+
+      // 2. Safely return unit to AVAILABLE if still RESERVED
+      await tx.unit.updateMany({
+        where: {
+          id: reservation.unitId,
+          companyId,
+          status: UnitStatus.RESERVED,
+        },
+        data: { status: UnitStatus.AVAILABLE },
+      });
+
+      // 3. Audit log
+      await tx.auditLog.create({
+        data: {
+          companyId,
+          userId,
+          action: "RESERVATION_CANCELLED",
+          entityType: "Reservation",
+          entityId: reservationId,
+          details: JSON.stringify({
+            unitId: reservation.unitId,
+            unitCode: reservation.unit.code,
+            reason: "Cancelled by user",
+          }),
+        },
+      });
+
+      return updated;
+    });
   }
 }

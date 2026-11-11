@@ -11,18 +11,22 @@ const createReservationSchema = z.object({
   clientId: z.string().min(1, "يرجى اختيار العميل المسجل"),
 });
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const user = await AuthService.getCurrentUser(prisma);
     if (!user) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const reservations = await ReservationService.listActiveReservations(
+    const { searchParams } = new URL(req.url);
+    const status = searchParams.get("status") || "ACTIVE";
+
+    const reservations = await ReservationService.listReservations(
       prisma,
       user.companyId,
       user.id,
-      user.role
+      user.role,
+      status
     );
 
     return NextResponse.json({ success: true, data: reservations });

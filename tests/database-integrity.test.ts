@@ -305,7 +305,7 @@ describe("Phase 2: Database Architecture, Multi-Tenancy & Integrity Constraints"
   // =========================================================================
   it("should reject payment allocations that exceed the corresponding payment amount via trigger", async () => {
     const contract = await prisma.contract.findFirstOrThrow({
-      where: { companyId: companyAId },
+      where: { companyId: companyAId, installments: { some: {} } },
       include: { installments: true },
     });
 
@@ -322,7 +322,7 @@ describe("Phase 2: Database Architecture, Multi-Tenancy & Integrity Constraints"
     });
 
     // Pick an installment with 0 prior allocations (e.g. installment #5 with amount 38,550.00)
-    const targetInstallment = contract.installments.find((i) => i.paidAmount.toNumber() === 0)!;
+    const targetInstallment = contract.installments.find((i) => i.paidAmount.toNumber() === 0) || contract.installments[0]!;
 
     // Allocating 6,000.00 when payment is only 5,000.00 (while installment allows up to 38,550.00)
     // MUST trigger the payment allocation ceiling error!
@@ -342,7 +342,7 @@ describe("Phase 2: Database Architecture, Multi-Tenancy & Integrity Constraints"
 
   it("should reject installment allocations that exceed the installment amount via trigger", async () => {
     const contract = await prisma.contract.findFirstOrThrow({
-      where: { companyId: companyAId },
+      where: { companyId: companyAId, installments: { some: {} } },
       include: { installments: true },
     });
 

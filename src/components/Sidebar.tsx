@@ -9,7 +9,9 @@ import {
   ShieldCheck, 
   LogOut,
   User,
-  Home
+  Home,
+  Clock,
+  Calendar
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -33,12 +35,18 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
   useEffect(() => {
     fetch("/api/auth/me")
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (res.status === 401) {
+          router.push("/login");
+          return null;
+        }
+        return res.ok ? res.json() : null;
+      })
       .then((data) => {
         if (data?.user) setUser(data.user);
       })
       .catch(() => {});
-  }, []);
+  }, [router]);
 
   const handleLogout = async () => {
     try {
@@ -60,7 +68,9 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const navigationItems = [
     { id: "units", name: "الوحدات العقارية", href: "/units", icon: Home },
     { id: "clients", name: "إدارة العملاء", href: "/clients", icon: Users },
-    { id: "contracts", name: "العقود والأقساط", href: "/contracts", icon: FileText },
+    { id: "reservations", name: "إدارة الحجوزات", href: "/reservations", icon: Clock },
+    { id: "contracts", name: "العقود والاتفاقيات", href: "/contracts", icon: FileText },
+    { id: "installments", name: "جدول الأقساط", href: "/installments", icon: Calendar },
     { id: "payments", name: "المدفوعات والتحصيل", href: "/payments", icon: CreditCard },
     ...(user?.role === "COMPANY_ADMIN"
       ? [{ id: "audit", name: "سجل العمليات والرقابة", href: "/audit", icon: ShieldCheck }]

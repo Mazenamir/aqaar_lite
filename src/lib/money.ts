@@ -109,6 +109,10 @@ export function calculateInstallments(
 }
 
 // Backward compatibility helpers for integer halalas if needed
+export function decimalToHalalas(d: Prisma.Decimal): bigint {
+  return BigInt(d.times(100).toFixed(0));
+}
+
 export function sarToHalalas(sarStringOrNumber: string | number): bigint {
   const d = toDecimal(sarStringOrNumber);
   return BigInt(d.times(100).toFixed(0));
