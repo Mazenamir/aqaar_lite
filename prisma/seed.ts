@@ -29,7 +29,7 @@ async function main() {
     },
   });
 
-  const c1Admin = await prisma.user.create({
+  await prisma.user.create({
     data: {
       companyId: company1.id,
       email: "admin@riyadh.sa",
@@ -70,7 +70,7 @@ async function main() {
   });
 
   // Units for Company 1
-  const u1 = await prisma.unit.create({
+  await prisma.unit.create({
     data: {
       companyId: company1.id,
       project: "مجمع النخيل ريزيدنس",
@@ -84,7 +84,7 @@ async function main() {
     },
   });
 
-  const u2 = await prisma.unit.create({
+  await prisma.unit.create({
     data: {
       companyId: company1.id,
       project: "مجمع النخيل ريزيدنس",
@@ -98,7 +98,7 @@ async function main() {
     },
   });
 
-  const u3 = await prisma.unit.create({
+  await prisma.unit.create({
     data: {
       companyId: company1.id,
       project: "فلل ديار اليرموك",
@@ -137,7 +137,7 @@ async function main() {
     },
   });
 
-  const cl2 = await prisma.client.create({
+  await prisma.client.create({
     data: {
       companyId: company1.id,
       createdById: c1Agent1.id,
@@ -148,7 +148,7 @@ async function main() {
   });
 
   // Client for Agent 2 (isolation verification)
-  const cl3 = await prisma.client.create({
+  await prisma.client.create({
     data: {
       companyId: company1.id,
       createdById: c1Agent2.id,
@@ -203,7 +203,7 @@ async function main() {
     },
   });
 
-  const inst3 = await prisma.installment.create({
+  await prisma.installment.create({
     data: {
       contractId: contract1.id,
       installmentNumber: 3,
@@ -214,7 +214,7 @@ async function main() {
     },
   });
 
-  const inst4 = await prisma.installment.create({
+  await prisma.installment.create({
     data: {
       contractId: contract1.id,
       installmentNumber: 4,
@@ -302,7 +302,7 @@ async function main() {
     },
   });
 
-  const c2Admin = await prisma.user.create({
+  await prisma.user.create({
     data: {
       companyId: company2.id,
       email: "admin@najd.sa",
@@ -312,7 +312,7 @@ async function main() {
     },
   });
 
-  const c2Accountant = await prisma.user.create({
+  await prisma.user.create({
     data: {
       companyId: company2.id,
       email: "acc@najd.sa",
@@ -332,7 +332,7 @@ async function main() {
     },
   });
 
-  const c2Agent2 = await prisma.user.create({
+  await prisma.user.create({
     data: {
       companyId: company2.id,
       email: "agent2@najd.sa",
