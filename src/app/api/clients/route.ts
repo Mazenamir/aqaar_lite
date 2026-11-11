@@ -4,10 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { ClientService } from "@/lib/services/client.service";
 import { getErrorMessage, getErrorStatusCode } from "@/lib/errors/app-error";
+import { stripMassAssignmentFields } from "@/lib/security/rbac";
 
 const createClientSchema = z.object({
-  name: z.string().min(2, "اسم العميل مطلوب"),
-  phone: z.string().min(8, "رقم الهاتف مطلوب"),
+  name: z.string().min(2, "اسم العميل مطلوب ويجب أن يتكون من حرفين على الأقل"),
+  phone: z.string().min(8, "رقم الهاتف غير صالح"),
   notes: z.string().optional(),
 });
 
@@ -40,10 +41,13 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const user = await AuthService.getCurrentUser(prisma);
-    AuthService.requireRole(user, ["SALES_AGENT", "COMPANY_ADMIN"]);
+    // Mandated by Phase 5 requirements: Only SALES users can create clients
+    AuthService.requireRole(user, ["SALES_AGENT"]);
 
     const body = await req.json();
-    const result = createClientSchema.safeParse(body);
+    const sanitized = stripMassAssignmentFields(body, ["companyId", "role", "createdById", "salesRepId", "id"]);
+
+    const result = createClientSchema.safeParse(sanitized);
 
     if (!result.success) {
       return NextResponse.json(

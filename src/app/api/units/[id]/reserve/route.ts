@@ -27,22 +27,18 @@ export async function POST(
 
     const { clientId } = result.data;
 
-    // Use concurrency-safe reservation service
     const reservation = await ReservationService.createReservation(prisma, {
       companyId: user!.companyId,
       unitId,
       clientId,
       createdById: user!.id,
+      userRole: user!.role,
     });
 
     return NextResponse.json(
       {
         success: true,
-        data: {
-          id: reservation.id,
-          unitId: reservation.unitId,
-          expiresAt: reservation.expiresAt.toISOString(),
-        },
+        data: reservation,
       },
       { status: 201 }
     );
