@@ -8,7 +8,8 @@ import {
   FileText, 
   CreditCard, 
   ShieldCheck, 
-  LogOut
+  LogOut,
+  UserCheck
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -62,78 +63,69 @@ export function Sidebar() {
   ];
 
   return (
-    <aside className="fixed right-0 top-0 h-full w-72 bg-surface-container-lowest z-50 flex flex-col justify-between shadow-[0_1px_8px_rgba(0,0,0,0.04)] border-l border-outline-variant/30">
-      <div className="flex flex-col">
-        {/* Logo & Brand Header */}
-        <div className="p-6 flex items-center gap-3 bg-surface-container-lowest border-b border-surface-container-low">
-          <div className="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center text-on-primary font-bold text-lg shadow-sm">
-            ع
-          </div>
-          <div className="flex flex-col">
-            <span className="text-xl font-bold text-primary tracking-tight">عقار لايت</span>
-            <span className="text-xs text-on-surface-variant font-medium">
-              {user?.companyName || "إدارة المبيعات والأقساط"}
-            </span>
-          </div>
-        </div>
-
-        {/* Current Role Card */}
-        <div className="px-4 py-3">
-          <div className="bg-surface-container-low rounded-xl p-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-secondary"></span>
-              <div className="flex flex-col">
-                <span className="text-[11px] text-on-surface-variant font-medium">الدور الحالي</span>
-                <span className="text-xs text-on-surface font-semibold">{getRoleLabel(user?.role)}</span>
-              </div>
-            </div>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-fixed-dim text-primary font-bold font-mono">
-              RBAC
-            </span>
-          </div>
-        </div>
-
-        {/* Navigation Items */}
-        <nav className="flex flex-col gap-1.5 px-3 mt-3">
-          {navigationItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href || (item.href === "/units" && pathname === "/");
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                  isActive
-                    ? "bg-primary-container text-on-primary shadow-sm"
-                    : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? "text-on-primary" : "text-on-surface-variant"}`} />
-                <span>{item.name}</span>
-              </Link>
-            );
-          })}
-        </nav>
+    <aside className="w-full md:w-20 bg-[#002117] text-white rounded-[28px] md:rounded-[36px] py-6 px-3 flex md:flex-col justify-between items-center shadow-xl shrink-0 z-30 transition-all border border-emerald-950/40 md:self-stretch">
+      {/* Top: Brand Logo Circle */}
+      <div className="flex flex-col items-center gap-4">
+        <Link
+          href="/units"
+          className="w-12 h-12 rounded-full bg-white text-[#002117] flex items-center justify-center font-bold text-xl shadow-md hover:scale-105 transition-transform"
+          title="عقار لايت"
+        >
+          <Building2 className="w-6 h-6 text-[#064e3b]" />
+        </Link>
       </div>
 
-      {/* Footer Info & Logout */}
-      <div className="p-4 flex flex-col gap-2 bg-surface-container-lowest border-t border-surface-container-low">
-        <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-low">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-primary-fixed-dim animate-pulse"></span>
-            <span className="text-xs text-on-surface-variant font-medium">نظام متصل وموثق</span>
+      {/* Middle: Vertical Navigation Icons */}
+      <nav className="flex md:flex-col items-center gap-3 my-2">
+        {navigationItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname === item.href || (item.href === "/units" && pathname === "/");
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              title={item.name}
+              className={`relative group w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+                isActive
+                  ? "bg-white text-[#003527] shadow-lg shadow-black/20 scale-105"
+                  : "text-white/60 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <Icon className="w-5 h-5" />
+
+              {/* Hover Tooltip (RTL Aware) */}
+              <span className="hidden md:group-hover:flex absolute right-16 px-3 py-1.5 rounded-xl bg-[#003527] text-white text-xs font-semibold whitespace-nowrap shadow-xl border border-emerald-700/40 z-50 pointer-events-none animate-in fade-in zoom-in-95">
+                {item.name}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Bottom: User Avatar & Logout */}
+      <div className="flex md:flex-col items-center gap-3">
+        <div
+          className="relative group w-10 h-10 rounded-full bg-emerald-800 text-white flex items-center justify-center font-bold text-xs shadow-inner border border-emerald-600/30 cursor-pointer"
+          title={`${user?.name || "المستخدم"} (${getRoleLabel(user?.role)})`}
+        >
+          <UserCheck className="w-5 h-5 text-emerald-200" />
+
+          {/* User profile tooltip */}
+          <div className="hidden md:group-hover:flex flex-col absolute right-14 bottom-0 p-3 rounded-2xl bg-[#003527] text-white text-xs whitespace-nowrap shadow-2xl border border-emerald-700/40 z-50 pointer-events-none">
+            <span className="font-bold">{user?.name || "المستخدم"}</span>
+            <span className="text-[10px] text-emerald-300 font-medium">{getRoleLabel(user?.role)}</span>
+            <span className="text-[10px] text-emerald-400/80 font-mono mt-0.5">{user?.companyName}</span>
           </div>
-          <span className="font-mono text-xs text-on-surface-variant">v2.4</span>
         </div>
 
         <button
           type="button"
           onClick={handleLogout}
-          className="flex items-center gap-2 px-3 py-2 text-error text-xs font-semibold rounded-xl hover:bg-error-container hover:text-on-error transition-all text-right w-full"
+          title="تسجيل الخروج الآمن"
+          className="w-10 h-10 rounded-full flex items-center justify-center text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-colors"
         >
           <LogOut className="w-4 h-4" />
-          <span>تسجيل الخروج الآمن</span>
         </button>
       </div>
     </aside>

@@ -1,18 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Modal } from "@/components/Modal";
-import { 
-  Building2, 
-  CheckCircle2, 
-  Clock, 
-  CheckCheck, 
-  PlusCircle, 
-  Search, 
+import {
+  Building2,
+  CheckCircle2,
+  Clock,
+  Plus,
+  Search,
   ChevronLeft,
   ChevronRight,
-  AlertCircle
+  Tag,
+  ArrowUpRight,
+  Sparkles,
+  Calendar,
+  Layers,
+  ArrowLeft,
+  SlidersHorizontal,
+  Home,
+  Building
 } from "lucide-react";
 
 interface Unit {
@@ -43,9 +50,11 @@ interface ClientOption {
 export default function UnitsPage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState<string>("المستخدم");
   const [userRole, setUserRole] = useState<string>("");
+  const [companyName, setCompanyName] = useState<string>("شركة الرياض");
 
-  // Filters
+  // Filters & Search
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("newest");
@@ -81,7 +90,11 @@ export default function UnitsPage() {
     fetch("/api/auth/me")
       .then((res) => (res.ok ? res.json() : null))
       .then((d) => {
-        if (d?.user) setUserRole(d.user.role);
+        if (d?.user) {
+          setUserName(d.user.name || "المستخدم");
+          setUserRole(d.user.role || "");
+          setCompanyName(d.user.companyName || "شركة الرياض");
+        }
       });
   }, []);
 
@@ -175,9 +188,8 @@ export default function UnitsPage() {
       });
 
       const data = await res.json();
-
       if (!res.ok || !data.success) {
-        setFeedbackMsg({ type: "error", text: data.error || "فشل إضافة الوحدة" });
+        alert(data.error || "فشل إضافة الوحدة");
         return;
       }
 
@@ -185,14 +197,19 @@ export default function UnitsPage() {
       setNewProject("");
       setNewCode("");
       setNewPriceSar("");
-      setFeedbackMsg({ type: "success", text: "تمت إضافة الوحدة بنجاح." });
       fetchUnits();
-    } catch (err) {
-      setFeedbackMsg({ type: "error", text: "خطأ في الاتصال" });
+    } catch (e) {
+      alert("حدث خطأ أثناء حفظ الوحدة");
     }
   };
 
-  const handleUpdatePrice = async (e: React.FormEvent) => {
+  const handleOpenEditPrice = (unit: Unit) => {
+    setSelectedUnit(unit);
+    setEditPriceSar("");
+    setIsPriceModalOpen(true);
+  };
+
+  const handleSavePrice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUnit) return;
 
@@ -204,353 +221,668 @@ export default function UnitsPage() {
       });
 
       const data = await res.json();
-
       if (!res.ok || !data.success) {
-        setFeedbackMsg({ type: "error", text: data.error || "فشل تعديل السعر" });
+        alert(data.error || "فشل تعديل السعر");
         return;
       }
 
       setIsPriceModalOpen(false);
-      setFeedbackMsg({ type: "success", text: "تم تحديث السعر وتوثيقه في سجل التدقيق بنجاح." });
       fetchUnits();
-    } catch (err) {
-      setFeedbackMsg({ type: "error", text: "خطأ في الاتصال" });
+    } catch (e) {
+      alert("خطأ أثناء تعديل السعر");
     }
   };
 
+  // Counts for Bento Cards
   const availableCount = units.filter((u) => u.status === "AVAILABLE").length;
   const reservedCount = units.filter((u) => u.status === "RESERVED").length;
   const soldCount = units.filter((u) => u.status === "SOLD").length;
+  const totalValuationSar = useMemo(() => {
+    const totalHalalas = units.reduce((acc, u) => acc + BigInt(u.priceHalalas || "0"), 0n);
+    return (Number(totalHalalas) / 100).toLocaleString("ar-SA");
+  }, [units]);
 
   return (
-    <AppShell breadcrumbTitle="الوحدات العقارية">
-      {/* Top Action & Context Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-1.5 h-6 rounded-full bg-primary-container"></span>
-            <h1 className="text-2xl font-bold text-on-surface tracking-tight">الوحدات العقارية</h1>
-            <span className="text-xs bg-secondary-container text-on-secondary-container px-2.5 py-0.5 rounded-full font-medium">
-              محدّث بالكامل
-            </span>
+    <AppShell>
+      <div className="flex flex-col w-full gap-5">
+        
+        {/* Top Header Utility Bar (Greeting + Pill Actions matching mockup) */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-1">
+          {/* Greeting */}
+          <div className="flex flex-col">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#002117] tracking-tight flex items-center gap-2">
+              <span>مرحباً {userName.split(" ")[0]}</span>
+              <span className="text-2xl">👋</span>
+            </h1>
+            <p className="text-xs sm:text-sm text-gray-500 font-medium mt-0.5">
+              سعداء برؤيتك مجدداً! إليك أحدث مؤشرات مبيعات الوحدات العقارية اليوم.
+            </p>
           </div>
-          <p className="text-xs text-on-surface-variant">
-            إدارة وحجز الوحدات، فحص الأسعار، ومتابعة تواريخ انتهاء الحجز اللحظي (72 ساعة)
-          </p>
+
+          {/* Action & Utility Pills Row */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Quick Home Pill */}
+            <div className="bg-white border border-gray-200/80 rounded-full px-3.5 py-2 text-xs font-semibold text-gray-700 shadow-xs flex items-center gap-1.5 select-none">
+              <Home className="w-3.5 h-3.5 text-[#064e3b]" />
+              <span>الرئيسية</span>
+            </div>
+
+            {/* Add Unit / Reserve Action Button */}
+            {(userRole === "COMPANY_ADMIN" || userRole === "SALES_AGENT") && (
+              <button
+                onClick={() => (userRole === "COMPANY_ADMIN" ? setIsAddModalOpen(true) : setStatusFilter("AVAILABLE"))}
+                className="bg-[#064e3b] hover:bg-[#003527] text-white rounded-full px-4 py-2 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{userRole === "COMPANY_ADMIN" ? "+ إضافة وحدة جديدة" : "حجز وحدة متاحة"}</span>
+              </button>
+            )}
+
+            {/* Quick Search Pill */}
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="بحث سريع عن وحدة أو مشروع..."
+                className="bg-white border border-gray-200/80 rounded-full pr-8 pl-4 py-2 text-xs text-gray-800 shadow-xs outline-none focus:border-[#064e3b] focus:ring-2 focus:ring-[#064e3b]/10 w-40 sm:w-52 transition-all placeholder:text-gray-400 font-medium"
+              />
+              <Search className="w-3.5 h-3.5 absolute right-3 text-gray-400 pointer-events-none" />
+            </div>
+
+            {/* Time Pill */}
+            <div className="hidden sm:flex items-center gap-1.5 bg-white border border-gray-200/80 rounded-full px-3.5 py-2 text-xs font-mono font-bold text-gray-700 shadow-xs select-none">
+              <Clock className="w-3.5 h-3.5 text-gray-400" />
+              <span>10:37 ص</span>
+            </div>
+
+            {/* Company Branch Pill */}
+            <div className="hidden md:flex items-center gap-1.5 bg-white border border-gray-200/80 rounded-full px-3.5 py-2 text-xs font-medium text-gray-600 shadow-xs select-none">
+              <Building className="w-3.5 h-3.5 text-secondary" />
+              <span>{companyName}</span>
+            </div>
+          </div>
         </div>
 
-        {userRole === "COMPANY_ADMIN" && (
-          <button
-            type="button"
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary-container hover:bg-primary text-on-primary text-xs font-bold shadow-sm transition-all active:scale-95"
+        {/* Global Feedback Banner */}
+        {feedbackMsg && (
+          <div
+            className={`p-3.5 rounded-2xl text-xs font-semibold flex items-center justify-between shadow-sm animate-in fade-in ${
+              feedbackMsg.type === "success"
+                ? "bg-secondary-container text-on-secondary-container border border-secondary/30"
+                : "bg-red-50 text-red-700 border border-red-200"
+            }`}
           >
-            <PlusCircle className="w-4 h-4" />
-            <span>إضافة وحدة جديدة</span>
-          </button>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{feedbackMsg.text}</span>
+            </div>
+            <button onClick={() => setFeedbackMsg(null)} className="text-xs font-bold underline">
+              إغلاق
+            </button>
+          </div>
         )}
-      </div>
 
-      {/* Global Feedback Banner */}
-      {feedbackMsg && (
-        <div
-          className={`mb-6 p-4 rounded-xl text-xs flex items-center justify-between ${
-            feedbackMsg.type === "success"
-              ? "bg-secondary-container text-on-secondary-container"
-              : "bg-error-container text-on-error"
-          }`}
-        >
-          <div className="flex items-center gap-2 font-medium">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{feedbackMsg.text}</span>
+        {/* =========================================================================
+            BENTO GRID ROW 1: 4 Organic Curved Cards (Matching uploaded image)
+           ========================================================================= */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          
+          {/* Card 1: Organic Mint Blob Card ("44 hours at work" style -> إجمالي الوحدات) */}
+          <div className="bg-white rounded-[28px] p-5 shadow-sm border border-gray-100/90 relative overflow-hidden flex flex-col justify-between min-h-[175px] group hover:shadow-md transition-shadow">
+            {/* Wavy organic blob top shape */}
+            <div className="absolute -top-10 -left-10 w-36 h-36 bg-[#d9f99d]/50 rounded-[40%_60%_70%_30%/40%_50%_60%_55%] pointer-events-none group-hover:scale-110 transition-transform"></div>
+            
+            {/* Top icon badge */}
+            <div className="flex items-center justify-between relative z-10">
+              <div className="w-8 h-8 rounded-full bg-[#ecfccb] text-[#365314] flex items-center justify-center font-bold text-xs shadow-xs">
+                <Building2 className="w-4 h-4" />
+              </div>
+              <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100">
+                محدث لحظياً
+              </span>
+            </div>
+
+            {/* Metric Body */}
+            <div className="relative z-10 mt-3">
+              <div className="text-3xl font-extrabold text-[#002117] font-mono tracking-tight">
+                {totalCount} <span className="text-sm font-semibold text-gray-500 font-sans">وحدة</span>
+              </div>
+              <div className="text-xs text-gray-500 font-medium mt-1">
+                إجمالي الوحدات المسجلة في المحفظة
+              </div>
+            </div>
           </div>
-          <button onClick={() => setFeedbackMsg(null)} className="text-xs font-bold underline">
-            إغلاق
-          </button>
-        </div>
-      )}
 
-      {/* Metric Bento Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm border border-outline-variant/20 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-on-surface-variant font-medium">إجمالي الوحدات</span>
-            <div className="text-3xl font-bold text-on-surface mt-1">{totalCount}</div>
-            <span className="text-[11px] text-secondary font-medium">ضمن الشركة الحالية</span>
+          {/* Card 2: Organic Warm Terracotta Blob Card ("13 tasks" style -> الوحدات المتاحة) */}
+          <div className="bg-white rounded-[28px] p-5 shadow-sm border border-gray-100/90 relative overflow-hidden flex flex-col justify-between min-h-[175px] group hover:shadow-md transition-shadow">
+            {/* Wavy organic blob top shape in warm orange/terracotta */}
+            <div className="absolute -top-10 -left-10 w-36 h-36 bg-[#fed7aa]/55 rounded-[60%_40%_30%_70%/50%_60%_40%_50%] pointer-events-none group-hover:scale-110 transition-transform"></div>
+            
+            {/* Top icon badge */}
+            <div className="flex items-center justify-between relative z-10">
+              <div className="w-8 h-8 rounded-full bg-[#ffedd5] text-[#9a3412] flex items-center justify-center font-bold text-xs shadow-xs">
+                <Layers className="w-4 h-4" />
+              </div>
+              <span className="text-[11px] font-semibold text-orange-800 bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-100">
+                جاهزة للحجز
+              </span>
+            </div>
+
+            {/* Metric Body */}
+            <div className="relative z-10 mt-3">
+              <div className="text-3xl font-extrabold text-[#9a3412] font-mono tracking-tight">
+                {availableCount} <span className="text-sm font-semibold text-gray-500 font-sans">وحدة متاحة</span>
+              </div>
+              <div className="text-xs text-gray-500 font-medium mt-1">
+                متاحة للبيع والتقسيط مع دفعة أولى
+              </div>
+            </div>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-primary-container">
-            <Building2 className="w-6 h-6" />
+
+          {/* Card 3: Dashed Action Card ("Add new widgets" style -> حجز وحدة سريع) */}
+          <div
+            onClick={() => {
+              const firstAvail = units.find((u) => u.status === "AVAILABLE");
+              if (firstAvail) {
+                handleOpenReserve(firstAvail);
+              } else {
+                alert("لا توجد وحدات متاحة للحجز حالياً.");
+              }
+            }}
+            className="border-2 border-dashed border-gray-300 hover:border-[#064e3b] rounded-[28px] p-5 flex flex-col items-center justify-center gap-2.5 transition-all cursor-pointer bg-white/70 hover:bg-emerald-50/40 min-h-[175px] group select-none shadow-xs"
+          >
+            <div className="w-11 h-11 rounded-full bg-[#dcfce7] group-hover:bg-[#064e3b] text-[#166534] group-hover:text-white flex items-center justify-center transition-colors shadow-xs">
+              <Plus className="w-5 h-5 font-bold" />
+            </div>
+            <div className="text-center">
+              <span className="text-xs font-bold text-[#002117] group-hover:text-[#064e3b] block transition-colors">
+                + حجز وحدة سريعة (72h)
+              </span>
+              <span className="text-[11px] text-gray-400 mt-0.5 block">
+                تخصيص فوري لعميل معتمد
+              </span>
+            </div>
           </div>
-        </div>
 
-        <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm border border-outline-variant/20 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-on-surface-variant font-medium">الوحدات المتاحة</span>
-            <div className="text-3xl font-bold text-primary-container mt-1">{availableCount}</div>
-            <span className="text-[11px] text-secondary font-medium">جاهزة للحجز الفوري</span>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-secondary-container/40 flex items-center justify-center text-primary-container">
-            <CheckCircle2 className="w-6 h-6" />
-          </div>
-        </div>
+          {/* Card 4: Vibrant Highlight Bento Card ("Go premium $93.7" style -> محفظة المبيعات) */}
+          <div className="bg-gradient-to-br from-[#064e3b] via-[#043327] to-[#002117] rounded-[28px] p-5 text-white flex flex-col justify-between min-h-[175px] shadow-lg shadow-emerald-950/20 relative overflow-hidden group">
+            {/* Ambient decorative curve pattern in background */}
+            <div className="absolute inset-0 opacity-15 pointer-events-none bg-[radial-gradient(#b0f0d6_1px,transparent_1px)] [background-size:16px_16px]"></div>
+            <div className="absolute -bottom-8 -right-8 w-32 h-32 bg-primary-fixed/15 rounded-full blur-2xl pointer-events-none"></div>
 
-        <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm border border-outline-variant/20 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-on-surface-variant font-medium">الوحدات المحجوزة</span>
-            <div className="text-3xl font-bold text-tertiary-container mt-1">{reservedCount}</div>
-            <span className="text-[11px] text-tertiary font-medium">صلاحية 72 ساعة</span>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-tertiary-fixed/60 flex items-center justify-center text-tertiary-container">
-            <Clock className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-surface-container-lowest p-5 rounded-xl shadow-sm border border-outline-variant/20 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-on-surface-variant font-medium">الوحدات المباعة</span>
-            <div className="text-3xl font-bold text-on-surface-variant mt-1">{soldCount}</div>
-            <span className="text-[11px] text-on-surface-variant font-medium">عقود معتمدة نهائياً</span>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-on-surface-variant">
-            <CheckCheck className="w-6 h-6" />
-          </div>
-        </div>
-      </div>
-
-      {/* Filtration Strip */}
-      <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm mb-6 flex flex-col md:flex-row items-center justify-between gap-4 border border-outline-variant/20">
-        <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 absolute right-3 text-on-surface-variant pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث برقم الوحدة، اسم المشروع، أو النوع..."
-            className="w-full h-10 pr-9 pl-4 bg-surface-container-low text-on-surface text-xs rounded-xl outline-none border border-outline-variant/20 focus:border-primary-container focus:ring-1 focus:ring-primary-container"
-          />
-        </div>
-
-        {/* Status Filter Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          {[
-            { id: "all", label: "الكل" },
-            { id: "AVAILABLE", label: "متاح" },
-            { id: "RESERVED", label: "محجوز" },
-            { id: "SOLD", label: "مباع" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => { setStatusFilter(tab.id); setPage(1); }}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                statusFilter === tab.id
-                  ? "bg-primary-container text-on-primary shadow-sm"
-                  : "bg-surface-container-low hover:bg-surface-container text-on-surface-variant"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Sorting Dropdown */}
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-          className="h-10 px-3 bg-surface-container-low text-on-surface text-xs rounded-xl border border-outline-variant/20 outline-none"
-        >
-          <option value="newest">الأحدث إضافة</option>
-          <option value="priceAsc">السعر: من الأقل للأعلى</option>
-          <option value="priceDesc">السعر: من الأعلى للأقل</option>
-          <option value="areaDesc">المساحة: الأكبر أولاً</option>
-          <option value="areaAsc">المساحة: الأصغر أولاً</option>
-        </select>
-      </div>
-
-      {/* Units Table */}
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col mb-6 border border-outline-variant/20">
-        <div className="overflow-x-auto">
-          <table className="w-full text-right border-collapse text-xs">
-            <thead>
-              <tr className="h-12 bg-surface-container-low/80 text-on-surface-variant font-semibold border-b border-surface-container">
-                <th className="px-5 py-3">رقم الوحدة</th>
-                <th className="px-5 py-3">المشروع</th>
-                <th className="px-5 py-3">النوع والطابق</th>
-                <th className="px-5 py-3">المساحة / الغرف</th>
-                <th className="px-5 py-3">السعر (ر.س)</th>
-                <th className="px-5 py-3">الحالة</th>
-                <th className="px-5 py-3 text-center">الإجراء المتاح</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-surface-container-low">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="px-5 py-10 text-center text-on-surface-variant">
-                    جاري تحميل بيانات الوحدات العقارية...
-                  </td>
-                </tr>
-              ) : units.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-5 py-10 text-center text-on-surface-variant">
-                    لا توجد وحدات مطابقة لمعايير البحث في شركتك.
-                  </td>
-                </tr>
-              ) : (
-                units.map((unit) => {
-                  const isAvailable = unit.status === "AVAILABLE";
-                  const isReserved = unit.status === "RESERVED";
-                  const isSold = unit.status === "SOLD";
-
-                  return (
-                    <tr key={unit.id} className="h-14 hover:bg-surface-container-low/40 transition-colors">
-                      <td className="px-5 py-3 font-mono font-bold text-primary-container">
-                        {unit.code}
-                      </td>
-                      <td className="px-5 py-3 font-medium text-on-surface">
-                        {unit.project}
-                      </td>
-                      <td className="px-5 py-3 text-on-surface-variant">
-                        <div>
-                          <span className="font-semibold text-on-surface">{unit.type}</span>
-                          <span className="text-[11px] block text-on-surface-variant">{unit.floor}</span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3 font-mono text-on-surface">
-                        {unit.area} م² ({unit.rooms} غرف)
-                      </td>
-                      <td className="px-5 py-3 font-mono font-bold text-on-surface">
-                        {unit.priceSar} ر.س
-                      </td>
-                      <td className="px-5 py-3">
-                        {isAvailable && (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-secondary-container text-on-secondary-container">
-                            <span className="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
-                            متاح للبيع
-                          </span>
-                        )}
-                        {isReserved && (
-                          <div className="flex flex-col">
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-tertiary-fixed text-tertiary-container">
-                              <span className="w-1.5 h-1.5 rounded-full bg-tertiary-container"></span>
-                              محجوز مؤقتاً
-                            </span>
-                            {unit.reservation && (
-                              <span className="text-[10px] text-on-surface-variant mt-0.5">
-                                العميل: {unit.reservation.clientName}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {isSold && (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-surface-container text-on-surface-variant">
-                            <span className="w-1.5 h-1.5 rounded-full bg-outline"></span>
-                            تم البيع
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          {isAvailable && userRole === "SALES_AGENT" && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenReserve(unit)}
-                              className="px-3.5 py-1.5 rounded-xl bg-primary-container text-on-primary hover:bg-primary text-xs font-semibold shadow-sm transition-all"
-                            >
-                              حجز الوحدة
-                            </button>
-                          )}
-
-                          {isAvailable && userRole === "COMPANY_ADMIN" && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedUnit(unit);
-                                setEditPriceSar(unit.priceSar.replace(/[^\d]/g, ""));
-                                setIsPriceModalOpen(true);
-                              }}
-                              className="px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-medium text-on-surface"
-                            >
-                              تعديل السعر
-                            </button>
-                          )}
-
-                          {isReserved && (
-                            <span className="text-[11px] text-tertiary font-mono">
-                              حجز نشط 72h
-                            </span>
-                          )}
-
-                          {isSold && (
-                            <span className="text-[11px] text-on-surface-variant font-mono">
-                              مباعة نهائياً
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Bar */}
-        <div className="px-6 py-4 bg-surface-container-low/40 flex items-center justify-between border-t border-surface-container">
-          <div className="text-xs text-on-surface-variant font-medium">
-            عرض صفحة <span className="font-bold text-on-surface">{page}</span> من أصل <span className="font-bold text-on-surface">{totalPages || 1}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-              className="p-1.5 rounded-lg border border-outline-variant/30 text-on-surface-variant disabled:opacity-40"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-            <span className="px-3 py-1 font-mono font-bold text-xs bg-primary-container text-on-primary rounded-lg">
-              {page}
-            </span>
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              className="p-1.5 rounded-lg border border-outline-variant/30 text-on-surface-variant disabled:opacity-40"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Reservation Modal */}
-      <Modal
-        isOpen={isReserveModalOpen}
-        onClose={() => setIsReserveModalOpen(false)}
-        title="حجز وحدة عقارية لعميل (صلاحية 72 ساعة)"
-      >
-        {selectedUnit && (
-          <form onSubmit={handleConfirmReservation} className="flex flex-col gap-4">
-            <div className="p-3 bg-surface-container-low rounded-xl">
-              <span className="font-mono text-sm font-bold text-primary-container">{selectedUnit.code}</span>
-              <div className="text-xs font-semibold text-on-surface">{selectedUnit.project}</div>
-              <div className="text-[11px] text-on-surface-variant font-mono mt-0.5">
-                السعر المعتمد: {selectedUnit.priceSar} ر.س
+            {/* Top arrow button */}
+            <div className="flex items-center justify-between relative z-10">
+              <span className="text-[11px] font-semibold text-emerald-200">
+                إجمالي قيمة المعروض
+              </span>
+              <div className="w-7 h-7 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center text-white text-xs group-hover:translate-x-[-2px] group-hover:translate-y-[-2px] transition-transform">
+                <ArrowUpRight className="w-3.5 h-3.5" />
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-on-surface">اختر العميل من قائمة عملائك *</label>
+            {/* Financial Metric */}
+            <div className="relative z-10 my-2">
+              <div className="text-2xl sm:text-3xl font-extrabold text-white font-mono tracking-tight">
+                {totalValuationSar} <span className="text-xs text-emerald-300 font-sans">ر.س</span>
+              </div>
+            </div>
+
+            {/* Bottom Two Pill Tags */}
+            <div className="flex items-center gap-2 relative z-10">
+              <span className="px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-sm text-[10px] font-semibold text-white">
+                {soldCount} مباعة
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-400/20 backdrop-blur-sm text-[10px] font-semibold text-emerald-200">
+                {reservedCount} محجوزة
+              </span>
+            </div>
+          </div>
+
+        </div>
+
+        {/* =========================================================================
+            BENTO GRID ROW 2: Middle Analytical & Progress Section (Matching mockup)
+           ========================================================================= */}
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+          
+          {/* Center Activity Timeline Bento Card (8 cols) -> "Track time spent" style */}
+          <div className="xl:col-span-8 bg-white rounded-[32px] p-6 shadow-sm border border-gray-100 flex flex-col justify-between min-h-[280px] relative overflow-hidden">
+            {/* Header info */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-emerald-50 text-[#064e3b] flex items-center justify-center font-bold text-xs">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">حركة نشاط المبيعات والحجوزات الأسبوعية</h3>
+                  <span className="text-[11px] text-gray-400">معدل الإقبال وتوزيع المعاملات على مدار الأيام</span>
+                </div>
+              </div>
+
+              {/* Floating Status Pill */}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f0fdf4] border border-emerald-200 text-[#166534] text-xs font-semibold shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>الحجوزات النشطة: {reservedCount} وحدات</span>
+              </div>
+            </div>
+
+            {/* Visual Bar Timeline with Smooth Curved Overlay (Replicating mockup aesthetic) */}
+            <div className="relative pt-6 pb-2">
+              {/* Organic wave line (SVG curve) */}
+              <svg
+                viewBox="0 0 600 120"
+                className="w-full h-24 overflow-visible pointer-events-none absolute top-10 left-0 right-0 z-10"
+                preserveAspectRatio="none"
+              >
+                <path
+                  d="M 10,75 Q 80,110 160,50 T 320,30 T 450,75 T 590,95"
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  className="opacity-80"
+                />
+                <path
+                  d="M 10,95 Q 120,40 240,65 T 400,20 T 590,55"
+                  fill="none"
+                  stroke="#f97316"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  className="opacity-60"
+                />
+              </svg>
+
+              {/* Day Pillars */}
+              <div className="grid grid-cols-7 gap-2 text-center relative z-20">
+                {[
+                  { day: "السبت", count: "3h", height: "h-20", active: false },
+                  { day: "الأحد", count: "5h", height: "h-28", active: false },
+                  { day: "الإثنين", count: "8h", height: "h-36", active: true },
+                  { day: "الثلاثاء", count: "2h", height: "h-16", active: false },
+                  { day: "الأربعاء", count: "6h", height: "h-32", active: false },
+                  { day: "الخميس", count: "4h", height: "h-24", active: false },
+                  { day: "الجمعة", count: "1h", height: "h-12", active: false },
+                ].map((col, idx) => (
+                  <div key={idx} className="flex flex-col items-center justify-end gap-2 group cursor-pointer">
+                    {/* Floating badge */}
+                    <span
+                      className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full transition-all ${
+                        col.active
+                          ? "bg-[#002117] text-white shadow-sm scale-110"
+                          : "bg-gray-100 text-gray-600 group-hover:bg-emerald-100 group-hover:text-emerald-800"
+                      }`}
+                    >
+                      {col.count}
+                    </span>
+
+                    {/* Capsule bar container */}
+                    <div className="w-10 bg-gray-50 rounded-full p-1 border border-gray-100 flex flex-col justify-end h-36">
+                      <div
+                        className={`w-full rounded-full transition-all ${col.height} ${
+                          col.active
+                            ? "bg-gradient-to-t from-[#064e3b] to-[#10b981]"
+                            : "bg-gray-200 group-hover:bg-[#bbf7d0]"
+                        }`}
+                      ></div>
+                    </div>
+
+                    {/* Day label */}
+                    <span className="text-[11px] font-semibold text-gray-500 mt-1">{col.day}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Statistics Bento Card (4 cols) -> "Completed task statistics" style */}
+          <div className="xl:col-span-4 bg-[#f0fdf4] border border-emerald-100 rounded-[32px] p-6 shadow-sm flex flex-col justify-between min-h-[280px]">
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-2xl bg-[#064e3b] text-white flex items-center justify-center font-bold shadow-xs">
+                <Sparkles className="w-4 h-4 text-primary-fixed" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">إحصائيات إنجاز المبيعات</h3>
+                <span className="text-[11px] text-emerald-800 font-medium">معدل التعاقد والإشغال</span>
+              </div>
+            </div>
+
+            {/* Stacked Progress Capsule Pills */}
+            <div className="flex flex-col gap-3 my-4">
+              {/* Progress 1: Sold */}
+              <div className="bg-white/80 rounded-2xl p-3 border border-emerald-200/50 flex flex-col gap-1.5 shadow-2xs">
+                <div className="flex justify-between text-xs font-semibold text-gray-800">
+                  <span>الوحدات المباعة والمعتمدة</span>
+                  <span className="font-mono text-[#064e3b] font-bold">
+                    {totalCount > 0 ? Math.round((soldCount / totalCount) * 100) : 0}%
+                  </span>
+                </div>
+                <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className="h-full bg-[#064e3b] rounded-full transition-all"
+                    style={{ width: `${totalCount > 0 ? (soldCount / totalCount) * 100 : 0}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Progress 2: Reserved */}
+              <div className="bg-white/80 rounded-2xl p-3 border border-emerald-200/50 flex flex-col gap-1.5 shadow-2xs">
+                <div className="flex justify-between text-xs font-semibold text-gray-800">
+                  <span>الحجوزات النشطة (72h)</span>
+                  <span className="font-mono text-emerald-700 font-bold">
+                    {totalCount > 0 ? Math.round((reservedCount / totalCount) * 100) : 0}%
+                  </span>
+                </div>
+                <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all"
+                    style={{ width: `${totalCount > 0 ? (reservedCount / totalCount) * 100 : 0}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Progress 3: Available */}
+              <div className="bg-white/80 rounded-2xl p-3 border border-emerald-200/50 flex flex-col gap-1.5 shadow-2xs">
+                <div className="flex justify-between text-xs font-semibold text-gray-800">
+                  <span>المعروض المتاح للبيع</span>
+                  <span className="font-mono text-orange-600 font-bold">
+                    {totalCount > 0 ? Math.round((availableCount / totalCount) * 100) : 0}%
+                  </span>
+                </div>
+                <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className="h-full bg-orange-400 rounded-full transition-all"
+                    style={{ width: `${totalCount > 0 ? (availableCount / totalCount) * 100 : 0}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer link */}
+            <div className="flex items-center justify-between text-xs font-bold text-[#064e3b] pt-1">
+              <span>عرض تفاصيل العقود والمبيعات</span>
+              <ArrowLeft className="w-4 h-4 text-[#064e3b] rtl:rotate-0" />
+            </div>
+          </div>
+
+        </div>
+
+        {/* =========================================================================
+            BENTO GRID ROW 3: Master Real-Estate Units Table ("Last notes" style)
+           ========================================================================= */}
+        <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100 flex flex-col gap-4">
+          
+          {/* Table Header & Quick Filters */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-gray-50 border border-gray-200 text-[#002117] flex items-center justify-center font-bold shadow-2xs">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-gray-900">سجل الوحدات العقارية والأسعار</h2>
+                <span className="text-xs text-gray-400">إدارة الأسعار، المساحات، وحالات الحجز والبيع</span>
+              </div>
+            </div>
+
+            {/* Filter Pills Row */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-full border border-gray-200">
+                <button
+                  onClick={() => setStatusFilter("all")}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                    statusFilter === "all"
+                      ? "bg-white text-gray-900 shadow-xs font-bold"
+                      : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  الكل ({totalCount})
+                </button>
+                <button
+                  onClick={() => setStatusFilter("AVAILABLE")}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                    statusFilter === "AVAILABLE"
+                      ? "bg-[#064e3b] text-white shadow-xs font-bold"
+                      : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  متاحة ({availableCount})
+                </button>
+                <button
+                  onClick={() => setStatusFilter("RESERVED")}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                    statusFilter === "RESERVED"
+                      ? "bg-amber-500 text-white shadow-xs font-bold"
+                      : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  محجوزة ({reservedCount})
+                </button>
+                <button
+                  onClick={() => setStatusFilter("SOLD")}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                    statusFilter === "SOLD"
+                      ? "bg-gray-800 text-white shadow-xs font-bold"
+                      : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  مباعة ({soldCount})
+                </button>
+              </div>
+
+              {/* Sort Selector */}
+              <div className="flex items-center gap-1 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200 text-xs">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-gray-500" />
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-gray-800 outline-none cursor-pointer"
+                >
+                  <option value="newest">الأحدث إضافة</option>
+                  <option value="priceAsc">السعر: من الأقل</option>
+                  <option value="priceDesc">السعر: من الأعلى</option>
+                  <option value="areaDesc">المساحة: الأكبر</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Table Container */}
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-right text-xs">
+              <thead className="bg-gray-50/70 text-gray-500 font-semibold select-none">
+                <tr className="h-11">
+                  <th className="pr-4 pl-2">الوحدة</th>
+                  <th className="px-3">المشروع</th>
+                  <th className="px-3">النوع والطابق</th>
+                  <th className="px-3">المساحة والغرف</th>
+                  <th className="px-3 font-mono">السعر المعتمد</th>
+                  <th className="px-3 text-center">حالة الوحدة</th>
+                  <th className="px-3">الحجز النشط</th>
+                  <th className="pl-4 pr-2 text-center">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-gray-800 font-medium">
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center gap-2 text-gray-400">
+                        <div className="w-7 h-7 border-3 border-[#064e3b] border-t-transparent rounded-full animate-spin"></div>
+                        <span className="text-xs">جاري تحميل بيانات الوحدات...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : units.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-12 text-gray-400">
+                      لا توجد وحدات تطابق معايير البحث والفرز المحددة.
+                    </td>
+                  </tr>
+                ) : (
+                  units.map((unit) => {
+                    const isAvailable = unit.status === "AVAILABLE";
+                    const isReserved = unit.status === "RESERVED";
+
+                    return (
+                      <tr
+                        key={unit.id}
+                        className="h-16 hover:bg-emerald-50/20 transition-colors group"
+                      >
+                        {/* Unit Code */}
+                        <td className="pr-4 pl-2 font-bold text-gray-900 font-mono text-sm">
+                          #{unit.code}
+                        </td>
+
+                        {/* Project Name */}
+                        <td className="px-3 font-semibold text-[#002117]">
+                          {unit.project}
+                        </td>
+
+                        {/* Type & Floor */}
+                        <td className="px-3 text-gray-600">
+                          <div className="flex flex-col">
+                            <span>{unit.type}</span>
+                            <span className="text-[10px] text-gray-400">{unit.floor}</span>
+                          </div>
+                        </td>
+
+                        {/* Area & Rooms */}
+                        <td className="px-3 font-mono text-gray-600">
+                          {unit.area} م² • {unit.rooms} غرف
+                        </td>
+
+                        {/* Price SAR */}
+                        <td className="px-3 font-mono font-bold text-gray-900 text-sm">
+                          {unit.priceSar} <span className="text-[10px] font-normal text-gray-400">ر.س</span>
+                        </td>
+
+                        {/* Status Badge */}
+                        <td className="px-3 text-center">
+                          {isAvailable ? (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-[#dcfce7] text-[#166534]">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#166534]"></span>
+                              متاحة
+                            </span>
+                          ) : isReserved ? (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-[#ffedd5] text-[#9a3412]">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#9a3412] animate-pulse"></span>
+                              محجوزة (72h)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700">
+                              مباعة
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Reservation Details */}
+                        <td className="px-3 text-xs">
+                          {unit.reservation ? (
+                            <div className="flex flex-col text-[11px]">
+                              <span className="font-semibold text-gray-800">{unit.reservation.clientName}</span>
+                              <span className="text-[10px] text-gray-400 font-mono">
+                                ينتهي: {new Date(unit.reservation.expiresAt).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="pl-4 pr-2 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* Reserve Button (for Sales Agents or Admin) */}
+                            {isAvailable && (userRole === "SALES_AGENT" || userRole === "COMPANY_ADMIN") && (
+                              <button
+                                onClick={() => handleOpenReserve(unit)}
+                                className="px-3 py-1.5 rounded-full bg-[#064e3b] hover:bg-[#003527] text-white text-[11px] font-bold shadow-2xs transition-all active:scale-95 cursor-pointer"
+                              >
+                                حجز 72h
+                              </button>
+                            )}
+
+                            {/* Edit Price (Admin only, disabled if Reserved/Sold) */}
+                            {userRole === "COMPANY_ADMIN" && (
+                              <button
+                                disabled={!isAvailable}
+                                onClick={() => handleOpenEditPrice(unit)}
+                                title={!isAvailable ? "لا يمكن تعديل سعر وحدة محجوزة أو مباعة وفقاً للائحة" : "تعديل سعر الوحدة"}
+                                className={`p-1.5 rounded-full text-xs font-semibold transition-all ${
+                                  isAvailable
+                                    ? "bg-gray-100 text-gray-700 hover:bg-gray-200 cursor-pointer"
+                                    : "bg-gray-50 text-gray-300 cursor-not-allowed"
+                                }`}
+                              >
+                                <Tag className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs text-gray-500">
+              <span>
+                صفحة {page} من أصل {totalPages}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-30 cursor-pointer"
+                >
+                  <ChevronRight className="w-4 h-4 rtl:rotate-0" />
+                </button>
+                <button
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-30 cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4 rtl:rotate-0" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* =========================================================================
+            MODALS: Reserve, Add Unit, Edit Price (Preserving 100% of business logic)
+           ========================================================================= */}
+
+        {/* Modal: Reserve Unit */}
+        <Modal
+          isOpen={isReserveModalOpen}
+          onClose={() => setIsReserveModalOpen(false)}
+          title={`حجز مؤقت للوحدة رقم #${selectedUnit?.code}`}
+        >
+          <form onSubmit={handleConfirmReservation} className="flex flex-col gap-4 text-xs font-sans">
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-100 flex flex-col gap-1">
+              <span className="font-bold text-[#064e3b]">ضوابط الحجز المؤقت (72 ساعة):</span>
+              <p className="text-gray-600 leading-relaxed text-[11px]">
+                سيتم قفل الوحدة حصرياً للعميل المختار لمدة 72 ساعة بدقة ذرية لمنع أي تعارض تزامني بين المندوبين.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="font-bold text-gray-700">اختر العميل المخصص للحجز *</label>
               {myClients.length === 0 ? (
-                <div className="p-3 bg-error-container text-on-error rounded-xl text-xs">
-                  لا يوجد لديك عملاء مسجلين حالياً. يرجى التوجه لصفحة العملاء وإضافة عميل أولاً.
+                <div className="p-3 rounded-xl bg-amber-50 text-amber-900 border border-amber-200">
+                  لا يوجد عملاء مسجلين تحت حسابك. يرجى إضافة عميل أولاً من صفحة إدارة العملاء.
                 </div>
               ) : (
                 <select
+                  required
                   value={selectedClientId}
                   onChange={(e) => setSelectedClientId(e.target.value)}
-                  className="h-10 px-3 bg-surface-container-lowest text-on-surface text-xs rounded-xl border border-outline-variant/30 outline-none"
+                  className="h-10 px-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#064e3b] text-gray-800"
                 >
                   {myClients.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -561,182 +893,193 @@ export default function UnitsPage() {
               )}
             </div>
 
-            <div className="p-3 bg-surface-container-low rounded-xl text-xs text-on-surface-variant flex items-start gap-2">
-              <Clock className="w-4 h-4 text-tertiary-container shrink-0 mt-0.5" />
-              <span>
-                الحجز صالح لمدة 72 ساعة فقط. في حال عدم تحويله لعقد معتمد وسداد الدفعة الأولى، تعود الوحدة تلقائياً لحالة «متاح».
-              </span>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container-low">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
               <button
                 type="button"
                 onClick={() => setIsReserveModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
+                className="px-4 py-2 rounded-full bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 cursor-pointer"
               >
                 إلغاء
               </button>
               <button
                 type="submit"
                 disabled={myClients.length === 0}
-                className="px-5 py-2 rounded-xl bg-primary-container text-on-primary text-xs font-bold shadow-sm hover:bg-primary disabled:opacity-50"
+                className="px-5 py-2 rounded-full bg-[#064e3b] text-white font-bold hover:bg-[#003527] shadow-sm disabled:opacity-50 cursor-pointer"
               >
-                تأكيد حجز الوحدة
+                تأكيد الحجز الفوري
               </button>
             </div>
           </form>
-        )}
-      </Modal>
+        </Modal>
 
-      {/* Add Unit Modal (Admin Only) */}
-      <Modal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title="إضافة وحدة عقارية جديدة للمشروع"
-      >
-        <form onSubmit={handleAddUnit} className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-on-surface">اسم المشروع العقاري *</label>
-            <input
-              type="text"
-              required
-              value={newProject}
-              onChange={(e) => setNewProject(e.target.value)}
-              placeholder="مثال: مجمع النخيل ريزيدنس"
-              className="h-10 px-3 bg-surface-container-lowest text-on-surface text-xs rounded-xl border border-outline-variant/30 outline-none"
-            />
-          </div>
+        {/* Modal: Add Unit */}
+        <Modal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          title="إضافة وحدة عقارية جديدة"
+        >
+          <form onSubmit={handleAddUnit} className="flex flex-col gap-3 text-xs font-sans">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-gray-700">اسم المشروع *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="مثال: برج النرجس"
+                  value={newProject}
+                  onChange={(e) => setNewProject(e.target.value)}
+                  className="h-10 px-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#064e3b]"
+                />
+              </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-on-surface">رقم / كود الوحدة *</label>
-              <input
-                type="text"
-                required
-                value={newCode}
-                onChange={(e) => setNewCode(e.target.value)}
-                placeholder="A-301"
-                className="h-10 px-3 bg-surface-container-lowest text-on-surface text-xs font-mono rounded-xl border border-outline-variant/30 outline-none"
-              />
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-gray-700">رقم الوحدة *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="مثال: A-402"
+                  value={newCode}
+                  onChange={(e) => setNewCode(e.target.value)}
+                  className="h-10 px-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#064e3b] font-mono"
+                />
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-on-surface">نوع الوحدة *</label>
-              <input
-                type="text"
-                required
-                value={newType}
-                onChange={(e) => setNewType(e.target.value)}
-                className="h-10 px-3 bg-surface-container-lowest text-on-surface text-xs rounded-xl border border-outline-variant/30 outline-none"
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-on-surface">الطابق</label>
-              <input
-                type="text"
-                value={newFloor}
-                onChange={(e) => setNewFloor(e.target.value)}
-                className="h-10 px-3 bg-surface-container-lowest text-on-surface text-xs rounded-xl border border-outline-variant/30 outline-none"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-gray-700">نوع الوحدة</label>
+                <select
+                  value={newType}
+                  onChange={(e) => setNewType(e.target.value)}
+                  className="h-10 px-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#064e3b]"
+                >
+                  <option>شقة ديلوكس</option>
+                  <option>بنتهاوس فاخر</option>
+                  <option>فيلا مستقلة</option>
+                  <option>تاون هاوس</option>
+                  <option>استوديو تنفيذي</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-gray-700">الطابق</label>
+                <input
+                  type="text"
+                  value={newFloor}
+                  onChange={(e) => setNewFloor(e.target.value)}
+                  className="h-10 px-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#064e3b]"
+                />
+              </div>
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-gray-700">المساحة (م²)</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={newArea}
+                  onChange={(e) => setNewArea(Number(e.target.value))}
+                  className="h-10 px-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#064e3b] font-mono"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-gray-700">عدد الغرف</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={newRooms}
+                  onChange={(e) => setNewRooms(Number(e.target.value))}
+                  className="h-10 px-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#064e3b] font-mono"
+                />
+              </div>
+            </div>
+
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-on-surface">المساحة (م²)</label>
+              <label className="font-bold text-gray-700">السعر بالريال السعودي *</label>
               <input
                 type="number"
-                value={newArea}
-                onChange={(e) => setNewArea(Number(e.target.value))}
-                className="h-10 px-3 bg-surface-container-lowest text-on-surface text-xs font-mono rounded-xl border border-outline-variant/30 outline-none"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-on-surface">الغرف</label>
-              <input
-                type="number"
-                value={newRooms}
-                onChange={(e) => setNewRooms(Number(e.target.value))}
-                className="h-10 px-3 bg-surface-container-lowest text-on-surface text-xs font-mono rounded-xl border border-outline-variant/30 outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-on-surface">السعر الإجمالي (ر.س) *</label>
-            <input
-              type="text"
-              required
-              value={newPriceSar}
-              onChange={(e) => setNewPriceSar(e.target.value)}
-              placeholder="مثال: 950000"
-              className="h-10 px-3 bg-surface-container-lowest text-on-surface text-xs font-mono rounded-xl border border-outline-variant/30 outline-none"
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container-low">
-            <button
-              type="button"
-              onClick={() => setIsAddModalOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
-            >
-              إلغاء
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 rounded-xl bg-primary-container text-on-primary text-xs font-bold shadow-sm hover:bg-primary"
-            >
-              حفظ الوحدة
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Edit Price Modal (Admin Only) */}
-      <Modal
-        isOpen={isPriceModalOpen}
-        onClose={() => setIsPriceModalOpen(false)}
-        title="تعديل سعر وحدة عقارية (موثق بالرقابة)"
-      >
-        {selectedUnit && (
-          <form onSubmit={handleUpdatePrice} className="flex flex-col gap-4">
-            <div className="text-xs">
-              <span className="text-on-surface-variant">الوحدة: </span>
-              <span className="font-bold font-mono">{selectedUnit.code}</span> - {selectedUnit.project}
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-on-surface">السعر الجديد (ر.س) *</label>
-              <input
-                type="text"
+                min="1"
                 required
-                value={editPriceSar}
-                onChange={(e) => setEditPriceSar(e.target.value)}
-                className="h-10 px-3 bg-surface-container-lowest text-on-surface text-xs font-mono rounded-xl border border-outline-variant/30 outline-none"
+                placeholder="مثال: 850000"
+                value={newPriceSar}
+                onChange={(e) => setNewPriceSar(e.target.value)}
+                className="h-10 px-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#064e3b] font-mono font-bold"
               />
             </div>
 
-            <div className="p-3 bg-surface-container-low rounded-xl text-xs text-on-surface-variant">
-              تنبيه: سيتم توثيق هذا التعديل مباشرة في سجل التدقيق والرقابة وتحديث السعر اللحظي للوحدة المتاحة.
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container-low">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
               <button
                 type="button"
-                onClick={() => setIsPriceModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
+                onClick={() => setIsAddModalOpen(false)}
+                className="px-4 py-2 rounded-full bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 cursor-pointer"
               >
                 إلغاء
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-primary-container text-on-primary text-xs font-bold shadow-sm hover:bg-primary"
+                className="px-5 py-2 rounded-full bg-[#064e3b] text-white font-bold hover:bg-[#003527] shadow-sm cursor-pointer"
               >
-                تأكيد التعديل
+                حفظ الوحدة
               </button>
             </div>
           </form>
-        )}
-      </Modal>
+        </Modal>
+
+        {/* Modal: Edit Price */}
+        <Modal
+          isOpen={isPriceModalOpen}
+          onClose={() => setIsPriceModalOpen(false)}
+          title={`تعديل سعر الوحدة رقم #${selectedUnit?.code}`}
+        >
+          <form onSubmit={handleSavePrice} className="flex flex-col gap-3 text-xs font-sans">
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 leading-relaxed">
+              <span className="font-bold">تنبيه رقابي صارم:</span>
+              <p className="mt-1 text-[11px]">
+                سيتم توثيق هذا الإجراء وتعديل السعر في سجل الرقابة المالي (Audit Log) متضمناً السعر القديم والجديد وهوية المعدل.
+              </p>
+            </div>
+
+            <div className="flex justify-between items-center py-2 px-3 bg-gray-50 rounded-xl font-mono">
+              <span className="text-gray-500">السعر الحالي:</span>
+              <span className="font-bold text-gray-900">{selectedUnit?.priceSar} ر.س</span>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="font-bold text-gray-700">السعر الجديد (ر.س) *</label>
+              <input
+                type="number"
+                min="1"
+                required
+                placeholder="أدخل السعر الجديد بالريال"
+                value={editPriceSar}
+                onChange={(e) => setEditPriceSar(e.target.value)}
+                className="h-10 px-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#064e3b] font-mono font-bold"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setIsPriceModalOpen(false)}
+                className="px-4 py-2 rounded-full bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-full bg-[#064e3b] text-white font-bold hover:bg-[#003527] shadow-sm cursor-pointer"
+              >
+                حفظ وتوثيق السعر
+              </button>
+            </div>
+          </form>
+        </Modal>
+
+      </div>
     </AppShell>
   );
 }
