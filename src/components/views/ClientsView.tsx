@@ -14,7 +14,11 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
-  UserCheck
+  UserCheck,
+  Eye,
+  StickyNote,
+  Calendar,
+  Building2
 } from "lucide-react";
 
 interface ClientItem {
@@ -23,25 +27,57 @@ interface ClientItem {
   phone: string;
   notes: string;
   createdByName: string;
+  salesRepId?: string;
+  createdById?: string;
   activeReservationsCount: number;
   contractsCount: number;
   createdAt: string;
+}
+
+interface ClientDetails {
+  id: string;
+  name: string;
+  phone: string;
+  notes: string;
+  createdByName: string;
+  salesRepId: string;
+  createdAt: string;
+  activeReservationsCount: number;
+  contractsCount: number;
+  reservations?: Array<{
+    id: string;
+    unitId: string;
+    unitCode: string;
+    expiresAt: string;
+    status: string;
+  }>;
+  contracts?: Array<{
+    id: string;
+    contractNumber: string;
+    status: string;
+  }>;
 }
 
 interface ClientsViewProps {
   onNavigateTab?: (tab: string, href: string) => void;
 }
 
-export function ClientsView({ onNavigateTab: _onNavigateTab }: ClientsViewProps) {
+export function ClientsView({ onNavigateTab }: ClientsViewProps) {
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string>("شركة الرياض");
+  const [currentUserRole, setCurrentUserRole] = useState<string>("");
 
   // Search & Filters
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("date-desc");
+
+  // Client Details Modal
+  const [selectedClient, setSelectedClient] = useState<ClientDetails | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   // Add Client Modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -59,8 +95,9 @@ export function ClientsView({ onNavigateTab: _onNavigateTab }: ClientsViewProps)
     fetch("/api/auth/me")
       .then((res) => (res.ok ? res.json() : null))
       .then((d) => {
-        if (d?.user?.companyName) {
-          setCompanyName(d.user.companyName);
+        if (d?.user) {
+          if (d.user.companyName) setCompanyName(d.user.companyName);
+          if (d.user.role) setCurrentUserRole(d.user.role);
         }
       })
       .catch(() => {});
@@ -86,6 +123,39 @@ export function ClientsView({ onNavigateTab: _onNavigateTab }: ClientsViewProps)
   useEffect(() => {
     fetchClients();
   }, []);
+
+  // Open Client Details Modal
+  const handleViewClientDetails = async (clientId: string) => {
+    try {
+      setLoadingDetails(true);
+      setIsDetailsModalOpen(true);
+      const res = await fetch(`/api/clients/${clientId}`);
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setSelectedClient(json.data);
+      } else {
+        // Fallback to client item from list
+        const item = clients.find((c) => c.id === clientId);
+        if (item) {
+          setSelectedClient({
+            id: item.id,
+            name: item.name,
+            phone: item.phone,
+            notes: item.notes,
+            createdByName: item.createdByName,
+            salesRepId: item.salesRepId || "",
+            createdAt: item.createdAt,
+            activeReservationsCount: item.activeReservationsCount,
+            contractsCount: item.contractsCount,
+          });
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
 
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,21 +244,23 @@ export function ClientsView({ onNavigateTab: _onNavigateTab }: ClientsViewProps)
 
         {/* Action & Utility Pills Row */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="bg-[#064e3b] hover:bg-[#003527] text-white rounded-full px-4 py-2 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>+ تسجيل عميل جديد</span>
-          </button>
+          {currentUserRole === "SALES_AGENT" && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="bg-[#064e3b] hover:bg-[#003527] text-white rounded-full px-4 py-2 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>+ تسجيل عميل جديد</span>
+            </button>
+          )}
 
           <div className="relative flex items-center">
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث بالاسم أو رقم الجوال..."
-              className="bg-white border border-gray-200/80 rounded-full pr-8 pl-4 py-2 text-xs text-gray-800 shadow-xs outline-none focus:border-[#064e3b] focus:ring-2 focus:ring-[#064e3b]/10 w-44 sm:w-56 transition-all placeholder:text-gray-400 font-medium"
+              placeholder="بحث بالاسم أو رقم الجوال أو الملاحظات..."
+              className="bg-white border border-gray-200/80 rounded-full pr-8 pl-4 py-2 text-xs text-gray-800 shadow-xs outline-none focus:border-[#064e3b] focus:ring-2 focus:ring-[#064e3b]/10 w-48 sm:w-60 transition-all placeholder:text-gray-400 font-medium"
             />
             <Search className="w-3.5 h-3.5 absolute right-3 text-gray-400 pointer-events-none" />
           </div>
@@ -247,7 +319,7 @@ export function ClientsView({ onNavigateTab: _onNavigateTab }: ClientsViewProps)
               <span className="text-xs font-bold text-gray-500">عميل مسجل</span>
             </div>
             <p className="text-xs text-gray-500 mt-1 font-medium">
-              قاعدة العملاء المسجلة في الشركة
+              قاعدة العملاء التابعة لحسابك في الشركة
             </p>
           </div>
         </div>
@@ -295,7 +367,7 @@ export function ClientsView({ onNavigateTab: _onNavigateTab }: ClientsViewProps)
               <span className="text-xs font-bold text-indigo-700">حجز جاري</span>
             </div>
             <p className="text-xs text-gray-500 mt-1 font-medium">
-              وحدات محجوزة بانتظار إبرام العقود
+              وحدات محجوزة بانتظار إبرام العقود (72h)
             </p>
           </div>
         </div>
@@ -396,7 +468,7 @@ export function ClientsView({ onNavigateTab: _onNavigateTab }: ClientsViewProps)
             <span className="text-xs font-bold">{error}</span>
             <button
               onClick={fetchClients}
-              className="mt-2 text-xs font-bold bg-red-50 text-red-700 px-4 py-1.5 rounded-full border border-red-200 hover:bg-red-100"
+              className="mt-2 text-xs font-bold bg-red-50 text-red-700 px-4 py-1.5 rounded-full border border-red-200 hover:bg-red-100 cursor-pointer"
             >
               إعادة المحاولة
             </button>
@@ -420,13 +492,18 @@ export function ClientsView({ onNavigateTab: _onNavigateTab }: ClientsViewProps)
                   <th className="px-4">الحالة والارتباط</th>
                   <th className="px-4">العقود النشطة</th>
                   <th className="px-4">تاريخ التسجيل</th>
-                  <th className="pl-6 pr-4">ملاحظات</th>
+                  <th className="px-4">ملاحظات</th>
+                  <th className="pl-6 pr-4 text-center">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100/80 text-gray-800">
                 {filteredClients.map((client) => {
                   return (
-                    <tr key={client.id} className="h-16 hover:bg-[#fafaf8] transition-colors group">
+                    <tr
+                      key={client.id}
+                      onClick={() => handleViewClientDetails(client.id)}
+                      className="h-16 hover:bg-[#fafaf8] transition-colors group cursor-pointer"
+                    >
                       {/* Name & Avatar */}
                       <td className="pr-6 pl-4 whitespace-nowrap">
                         <div className="flex items-center gap-2.5">
@@ -493,8 +570,19 @@ export function ClientsView({ onNavigateTab: _onNavigateTab }: ClientsViewProps)
                       </td>
 
                       {/* Notes */}
-                      <td className="pl-6 pr-4 max-w-xs truncate text-[11px] text-gray-500 font-medium" title={client.notes}>
+                      <td className="px-4 max-w-xs truncate text-[11px] text-gray-500 font-medium" title={client.notes}>
                         {client.notes || "—"}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="pl-6 pr-4 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => handleViewClientDetails(client.id)}
+                          className="bg-gray-100 hover:bg-[#064e3b] text-gray-700 hover:text-white px-3 py-1.5 rounded-full text-[11px] font-bold transition-all flex items-center gap-1 mx-auto cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>عرض التفاصيل</span>
+                        </button>
                       </td>
                     </tr>
                   );
@@ -504,6 +592,122 @@ export function ClientsView({ onNavigateTab: _onNavigateTab }: ClientsViewProps)
           </div>
         )}
       </div>
+
+      {/* CLIENT DETAILS MODAL */}
+      <Modal
+        isOpen={isDetailsModalOpen}
+        onClose={() => setIsDetailsModalOpen(false)}
+        title="الملف التفصيلي للعميل"
+      >
+        {loadingDetails ? (
+          <div className="p-8 flex flex-col items-center justify-center gap-2 text-gray-400">
+            <div className="w-6 h-6 border-2 border-[#064e3b] border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-xs font-semibold">جاري جلب تفاصيل العميل...</span>
+          </div>
+        ) : selectedClient ? (
+          <div className="flex flex-col gap-4">
+            {/* Header Identity Badge */}
+            <div className="bg-[#fcfdfa] border border-gray-200/80 rounded-2xl p-4 flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-[#ecfccb] text-[#365314] font-black text-lg flex items-center justify-center shadow-xs">
+                {selectedClient.name.slice(0, 1)}
+              </div>
+              <div className="flex flex-col">
+                <span className="font-extrabold text-base text-[#002117]">
+                  {selectedClient.name}
+                </span>
+                <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                  <span className="flex items-center gap-1 font-num font-semibold" dir="ltr">
+                    <Phone className="w-3.5 h-3.5 text-gray-400" />
+                    <span>{selectedClient.phone}</span>
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                    <span>تاريخ التسجيل: {selectedClient.createdAt.split("T")[0]}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Sales Representative Attribution */}
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-gray-50 border border-gray-100 text-xs">
+              <span className="text-gray-500 font-medium">المندوب المسؤول المالك للسجل:</span>
+              <span className="inline-flex items-center gap-1.5 font-bold text-[#064e3b]">
+                <ShieldCheck className="w-4 h-4 text-[#064e3b]" />
+                <span>{selectedClient.createdByName}</span>
+              </span>
+            </div>
+
+            {/* CLIENT NOTES (Requirement 7: Display client notes on the client details page) */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+                <StickyNote className="w-3.5 h-3.5 text-emerald-800" />
+                <span>ملاحظات ومتطلبات العميل العقارية:</span>
+              </div>
+              <div className="p-3.5 bg-[#fefce8] border border-[#fef08a] rounded-2xl text-xs text-gray-800 leading-relaxed font-medium min-h-[60px]">
+                {selectedClient.notes ? (
+                  <p>{selectedClient.notes}</p>
+                ) : (
+                  <p className="text-gray-400 italic">لا توجد ملاحظات مسجلة لهذا العميل حالياً.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Active Reservations for this client */}
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-indigo-700" />
+                <span>الحجوزات النشطة للوحدات:</span>
+              </span>
+              {selectedClient.reservations && selectedClient.reservations.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {selectedClient.reservations.map((res) => (
+                    <div
+                      key={res.id}
+                      className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl flex items-center justify-between text-xs font-semibold text-indigo-950"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-indigo-700" />
+                        <span>الوحدة #{res.unitCode}</span>
+                      </div>
+                      <span className="text-[11px] text-indigo-800 font-num">
+                        ينتهي الحجز: {new Date(res.expiresAt).toLocaleString("ar-SA")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 bg-gray-50 border border-gray-100 rounded-xl text-xs text-gray-400 text-center">
+                  لا توجد وحدات محجوزة حالياً لهذا العميل
+                </div>
+              )}
+            </div>
+
+            {/* Quick Action Buttons */}
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100 mt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDetailsModalOpen(false);
+                  onNavigateTab?.("units", "/units");
+                }}
+                className="h-10 px-4 rounded-full bg-[#064e3b] text-white text-xs font-bold hover:bg-[#003527] transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>حجز وحدة جديدة لهذا العميل</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsDetailsModalOpen(false)}
+                className="h-10 px-5 rounded-full bg-gray-100 text-gray-700 text-xs font-bold hover:bg-gray-200 transition-colors cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
 
       {/* Add Client Modal */}
       <Modal
