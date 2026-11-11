@@ -8,9 +8,16 @@ import { getErrorMessage, getErrorStatusCode } from "@/lib/errors/app-error";
 
 const draftContractSchema = z.object({
   reservationId: z.string().min(1, "معرف الحجز مطلوب"),
-  discountPercent: z.number().int().min(0).max(5, "الخصم لا يمكن أن يتجاوز 5%"),
+  discountPercent: z
+    .number()
+    .min(0, "نسبة الخصم لا يمكن أن تكون سالبة")
+    .max(5, "الحد الأقصى للخصم هو 5% من سعر الوحدة"),
   downPaymentSar: z.union([z.string(), z.number()]),
-  installmentCount: z.number().int().min(1).max(120, "عدد الأقساط يجب أن يكون بين 1 و 120"),
+  installmentCount: z
+    .number()
+    .int("عدد الأقساط يجب أن يكون رقماً صحيحاً")
+    .min(1, "عدد الأقساط يجب أن يكون 1 على الأقل")
+    .max(120, "عدد الأقساط يجب ألا يتجاوز 120 شهراً"),
   startDate: z.string().optional(),
 });
 
@@ -21,7 +28,7 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const contracts = await ContractService.listContracts(prisma, user.companyId);
+    const contracts = await ContractService.listContracts(prisma, user.companyId, user);
 
     return NextResponse.json({ success: true, data: contracts });
   } catch (error: unknown) {

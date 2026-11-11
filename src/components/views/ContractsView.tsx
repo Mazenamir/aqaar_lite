@@ -14,18 +14,23 @@ import {
   Gavel,
   Receipt,
   RefreshCw,
-  Coins
+  Coins,
+  AlertTriangle,
+  User,
+  Calendar,
+  Layers,
+  ArrowUpRight
 } from "lucide-react";
 
 interface InstallmentItem {
   id: string;
   installmentNumber: number;
   dueDate: string;
-  amountHalalas: string;
+  amount: string;
   amountSar: string;
-  paidAmountHalalas: string;
+  paidAmount: string;
   paidAmountSar: string;
-  status: "UNPAID" | "PARTIALLY_PAID" | "PAID" | "OVERDUE";
+  status: "PENDING" | "PARTIAL" | "PAID" | "OVERDUE" | "UNPAID" | "PARTIALLY_PAID";
   paidAt: string | null;
 }
 
@@ -38,26 +43,43 @@ interface ContractItem {
     code: string;
     project: string;
     type: string;
+    floor?: string;
+    area?: number;
+    rooms?: number;
+    price?: string;
+    priceSar?: string;
   };
   client: {
     id: string;
     name: string;
     phone: string;
+    notes?: string | null;
+  };
+  reservation?: {
+    id: string;
+    expiresAt: string;
+    status: string;
   };
   createdBy: string;
+  createdById?: string;
   approvedBy: string | null;
+  approvedById?: string | null;
   approvedAt: string | null;
   startDate: string;
   discountPercent: number;
-  unitPriceHalalas: string;
-  finalPriceHalalas: string;
+  discountAmount?: string;
+  discountAmountSar?: string;
+  unitPrice?: string;
+  unitPriceSar?: string;
+  finalPrice: string;
   finalPriceSar: string;
-  downPaymentHalalas: string;
+  downPayment: string;
   downPaymentSar: string;
-  totalPaidHalalas: string;
+  totalPaid: string;
   totalPaidSar: string;
-  remainingBalanceHalalas: string;
+  remainingBalance: string;
   remainingBalanceSar: string;
+  installmentCount: number;
   installments: InstallmentItem[];
 }
 
@@ -69,9 +91,9 @@ interface ActiveReservation {
     code: string;
     project: string;
     type: string;
-    priceHalalas: string;
+    price: string;
     priceSar: string;
-    rawPriceNumber: number;
+    rawPriceNumber?: number;
   };
   client: {
     id: string;
@@ -98,7 +120,7 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [companyName, setCompanyName] = useState<string>("شركة الرياض");
+  const [companyName, setCompanyName] = useState<string>("شركة الريادة الخضراء");
 
   // Selected contract for detail focus view
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
@@ -111,6 +133,9 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
   const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
   const [activeReservations, setActiveReservations] = useState<ActiveReservation[]>([]);
   const [loadingReservations, setLoadingReservations] = useState(false);
+
+  // Full Details Modal
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
 
   const [draftForm, setDraftForm] = useState({
     reservationId: "",
@@ -134,7 +159,7 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
         setCurrentUser(json.user);
         if (json.user?.companyName) setCompanyName(json.user.companyName);
       }
-    } catch (e) {}
+    } catch (_e) {}
   };
 
   const fetchContracts = async () => {
@@ -170,7 +195,7 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
           }
         }
       }
-    } catch (e) {
+    } catch (_e) {
     } finally {
       setLoadingReservations(false);
     }
@@ -244,7 +269,7 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
         throw new Error(json.error || "فشل اعتماد العقد");
       }
 
-      setFeedbackMsg({ type: "success", text: `تم اعتماد العقد ${json.data.contractNumber} وترحيله محاسبياً بنجاح` });
+      setFeedbackMsg({ type: "success", text: `تم اعتماد العقد ${json.data.contractNumber} وتحويل الوحدة إلى مباعة بنجاح` });
       fetchContracts();
     } catch (err: unknown) {
       setFeedbackMsg({ type: "error", text: err instanceof Error ? err.message : "حدث خطأ أثناء اعتماد العقد" });
@@ -274,7 +299,9 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
 
   // Live calculation for draft modal
   const selectedReservation = activeReservations.find((r) => r.id === draftForm.reservationId);
-  const basePrice = selectedReservation ? (Number(BigInt(selectedReservation.unit.priceHalalas) / 100n)) : 0;
+  const basePrice = selectedReservation
+    ? (selectedReservation.unit.rawPriceNumber ?? (selectedReservation.unit.price ? parseFloat(selectedReservation.unit.price) : 0))
+    : 0;
   const discountAmount = (basePrice * (draftForm.discountPercent || 0)) / 100;
   const finalPrice = Math.max(0, basePrice - discountAmount);
   const downPaymentVal = Number(draftForm.downPaymentSar) || 0;
@@ -286,11 +313,13 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
   const approvedContracts = contracts.filter((c) => c.status === "APPROVED").length;
   const draftContracts = contracts.filter((c) => c.status === "DRAFT").length;
   const totalRemainingSar = useMemo(() => {
-    const totalHalalas = contracts.reduce((acc, c) => acc + BigInt(c.remainingBalanceHalalas || "0"), 0n);
-    return (Number(totalHalalas) / 100).toLocaleString("en-US");
+    const total = contracts.reduce((acc, c) => acc + (parseFloat(c.remainingBalance || "0") || 0), 0);
+    return total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [contracts]);
 
-  const canApprove = currentUser?.role === "ACCOUNTANT" || currentUser?.role === "COMPANY_ADMIN";
+  // Mandatory RBAC check: only ACCOUNTANT can approve contracts
+  const canApprove = currentUser?.role === "ACCOUNTANT";
+  const isSalesAgent = currentUser?.role === "SALES_AGENT";
 
   return (
     <div className="flex flex-col w-full gap-5">
@@ -303,19 +332,21 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
             <span className="text-2xl">📑</span>
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 font-medium mt-0.5">
-            إعداد مسودات العقود، تطبيق قيود الخصم (5% كحد أقصى)، واعتماد وترحيل الدفاتر المالية.
+            إعداد مسودات العقود من الحجوزات النشطة، قيود الخصم (5% كحد أقصى)، وجدولة الأقساط، واعتماد المحاسب.
           </p>
         </div>
 
         {/* Action & Utility Pills Row */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={handleOpenDraftModal}
-            className="bg-[#064e3b] hover:bg-[#003527] text-white rounded-full px-4 py-2 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>+ إنشاء مسودة عقد</span>
-          </button>
+          {isSalesAgent && (
+            <button
+              onClick={handleOpenDraftModal}
+              className="bg-[#064e3b] hover:bg-[#003527] text-white rounded-full px-4 py-2 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>+ إنشاء مسودة عقد</span>
+            </button>
+          )}
 
           <div className="relative flex items-center">
             <input
@@ -406,7 +437,7 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
               <span className="text-xs font-bold text-emerald-700">عقد معتمد</span>
             </div>
             <p className="text-xs text-gray-500 mt-1 font-medium">
-              تم ترحيلها محاسبياً وتثبيت أقساطها
+              تم ترحيلها محاسبياً وتحويل الوحدات لمباعة
             </p>
           </div>
         </div>
@@ -430,7 +461,7 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
               <span className="text-xs font-bold text-orange-700">مسودة متبقية</span>
             </div>
             <p className="text-xs text-gray-500 mt-1 font-medium">
-              تنتظر مراجعة المحاسب أو مدير النظام
+              تنتظر مراجعة المحاسب للاعتماد
             </p>
           </div>
         </div>
@@ -535,7 +566,7 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
                 <tbody className="divide-y divide-gray-100/80 text-gray-800">
                   {filteredContracts.map((c) => {
                     const isSelected = selectedContract?.id === c.id;
-                    const finalSarFormatted = (Number(BigInt(c.finalPriceHalalas) / 100n)).toLocaleString("en-US");
+                    const finalSar = c.finalPriceSar || `${c.finalPrice} ر.س`;
                     return (
                       <tr
                         key={c.id}
@@ -570,7 +601,7 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
                         <td className="px-3 whitespace-nowrap">
                           <div className="flex flex-col">
                             <span className="font-extrabold text-gray-800 text-xs font-num">
-                              {finalSarFormatted} ر.س
+                              {finalSar}
                             </span>
                             {c.discountPercent > 0 && (
                               <span className="text-[10px] text-orange-700 font-num font-bold">
@@ -602,27 +633,31 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
 
                         {/* Action Column */}
                         <td className="pl-5 pr-3 text-left whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                          {c.status === "DRAFT" && canApprove ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            {c.status === "DRAFT" && canApprove && (
+                              <button
+                                onClick={() => handleApproveContract(c.id)}
+                                disabled={approvingId === c.id}
+                                className="bg-[#064e3b] hover:bg-[#003527] text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-xs transition-all flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                              >
+                                {approvingId === c.id ? (
+                                  <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                ) : (
+                                  <Gavel className="w-3 h-3" />
+                                )}
+                                <span>اعتماد العقد</span>
+                              </button>
+                            )}
                             <button
-                              onClick={() => handleApproveContract(c.id)}
-                              disabled={approvingId === c.id}
-                              className="bg-[#064e3b] hover:bg-[#003527] text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-xs transition-all flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                            >
-                              {approvingId === c.id ? (
-                                <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                              ) : (
-                                <Gavel className="w-3 h-3" />
-                              )}
-                              <span>اعتماد العقد</span>
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => setSelectedContractId(c.id)}
+                              onClick={() => {
+                                setSelectedContractId(c.id);
+                                setDetailsModalOpen(true);
+                              }}
                               className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-bold px-3 py-1.5 rounded-full transition-colors cursor-pointer"
                             >
-                              الأقساط ({c.installments?.length || 0})
+                              التفاصيل والأقساط
                             </button>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -675,30 +710,30 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
                 )}
               </div>
 
-              {/* Summary Stats Pill Box */}
+              {/* Summary Stats Box */}
               <div className="grid grid-cols-2 gap-2.5 p-3 rounded-2xl bg-[#fcfdfa] border border-gray-100 font-num text-xs">
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-gray-400 font-medium">القيمة الإجمالية</span>
+                  <span className="text-[10px] text-gray-400 font-medium">السعر النهائي</span>
                   <span className="font-extrabold text-gray-800 text-sm">
-                    {(Number(BigInt(selectedContract.finalPriceHalalas) / 100n)).toLocaleString("en-US")} ر.س
+                    {selectedContract.finalPriceSar || `${selectedContract.finalPrice} ر.س`}
                   </span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-gray-400 font-medium">الدفعة الأولى المدفوعة</span>
+                  <span className="text-[10px] text-gray-400 font-medium">الدفعة الأولى</span>
                   <span className="font-extrabold text-[#064e3b] text-sm">
-                    {(Number(BigInt(selectedContract.downPaymentHalalas) / 100n)).toLocaleString("en-US")} ر.س
+                    {selectedContract.downPaymentSar || `${selectedContract.downPayment} ر.س`}
                   </span>
                 </div>
                 <div className="flex flex-col pt-2 border-t border-gray-100">
                   <span className="text-[10px] text-gray-400 font-medium">المسدد من الأقساط</span>
                   <span className="font-extrabold text-indigo-700 text-sm">
-                    {(Number(BigInt(selectedContract.totalPaidHalalas) / 100n)).toLocaleString("en-US")} ر.س
+                    {selectedContract.totalPaidSar || `${selectedContract.totalPaid} ر.س`}
                   </span>
                 </div>
                 <div className="flex flex-col pt-2 border-t border-gray-100">
                   <span className="text-[10px] text-gray-400 font-medium">المتبقي للتحصيل</span>
                   <span className="font-extrabold text-orange-700 text-sm">
-                    {(Number(BigInt(selectedContract.remainingBalanceHalalas) / 100n)).toLocaleString("en-US")} ر.س
+                    {selectedContract.remainingBalanceSar || `${selectedContract.remainingBalance} ر.س`}
                   </span>
                 </div>
               </div>
@@ -707,24 +742,40 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between text-xs font-bold text-gray-700">
                   <span>جدول الأقساط الشهرية ({selectedContract.installments.length})</span>
-                  <span className="text-[10px] text-gray-400 font-normal">دقة 100% بالهللة</span>
+                  <button
+                    onClick={() => setDetailsModalOpen(true)}
+                    className="text-[11px] text-[#064e3b] hover:underline flex items-center gap-1 cursor-pointer font-bold"
+                  >
+                    <span>عرض التفاصيل الكاملة</span>
+                    <ArrowUpRight className="w-3 h-3" />
+                  </button>
                 </div>
 
                 <div className="max-h-[360px] overflow-y-auto space-y-2 pr-1">
                   {selectedContract.installments.map((inst) => {
-                    const instAmountSar = (Number(BigInt(inst.amountHalalas) / 100n)).toLocaleString("en-US");
-                    const paidSar = (Number(BigInt(inst.paidAmountHalalas) / 100n)).toLocaleString("en-US");
+                    const isOverdue = inst.status === "OVERDUE";
+                    const isPaid = inst.status === "PAID";
+                    const isPartial = inst.status === "PARTIAL" || inst.status === "PARTIALLY_PAID";
+
                     return (
                       <div
                         key={inst.id}
-                        className="p-3 rounded-2xl border border-gray-100 bg-white flex items-center justify-between hover:border-gray-200 transition-colors shadow-2xs"
+                        className={`p-3 rounded-2xl border transition-colors shadow-2xs flex items-center justify-between ${
+                          isOverdue
+                            ? "bg-red-50/60 border-red-200"
+                            : isPaid
+                            ? "bg-[#fcfdfa] border-gray-100"
+                            : "bg-white border-gray-100 hover:border-gray-200"
+                        }`}
                       >
                         <div className="flex items-center gap-2.5">
                           <div
                             className={`w-7 h-7 rounded-full font-num font-black text-xs flex items-center justify-center shrink-0 ${
-                              inst.status === "PAID"
+                              isPaid
                                 ? "bg-[#dcfce7] text-[#166534]"
-                                : inst.status === "PARTIALLY_PAID"
+                                : isOverdue
+                                ? "bg-red-200 text-red-800"
+                                : isPartial
                                 ? "bg-[#ffedd5] text-[#9a3412]"
                                 : "bg-gray-100 text-gray-600"
                             }`}
@@ -733,7 +784,7 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
                           </div>
                           <div className="flex flex-col font-num">
                             <span className="font-bold text-gray-800 text-xs">
-                              {instAmountSar} ر.س
+                              {inst.amountSar || `${inst.amount} ر.س`}
                             </span>
                             <span className="text-[10px] text-gray-400">
                               استحقاق: {inst.dueDate}
@@ -742,13 +793,18 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
                         </div>
 
                         <div>
-                          {inst.status === "PAID" ? (
+                          {isPaid ? (
                             <span className="px-2 py-0.5 rounded-full bg-[#dcfce7] text-[#166534] font-bold text-[10px]">
                               مسدد
                             </span>
-                          ) : inst.status === "PARTIALLY_PAID" ? (
+                          ) : isOverdue ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-bold text-[10px] border border-red-200">
+                              <AlertTriangle className="w-3 h-3 text-red-600" />
+                              <span>متأخر</span>
+                            </span>
+                          ) : isPartial ? (
                             <span className="px-2 py-0.5 rounded-full bg-[#ffedd5] text-[#9a3412] font-bold text-[10px] font-num">
-                              مسدد جزئياً ({paidSar} ر.س)
+                              مسدد جزئياً ({inst.paidAmountSar || `${inst.paidAmount} ر.س`})
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-bold text-[10px]">
@@ -770,6 +826,165 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
           )}
         </div>
       </div>
+
+      {/* FULL CONTRACT DETAILS MODAL */}
+      {selectedContract && (
+        <Modal
+          isOpen={detailsModalOpen}
+          onClose={() => setDetailsModalOpen(false)}
+          title={`تفاصيل العقد ${selectedContract.contractNumber}`}
+        >
+          <div className="flex flex-col gap-5 text-xs text-gray-800">
+            {/* Header Status & Role Actions */}
+            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#fcfdfa] border border-gray-100">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-gray-600">حالة العقد:</span>
+                {selectedContract.status === "APPROVED" ? (
+                  <span className="px-2.5 py-1 rounded-full bg-[#ecfdf5] text-[#065f46] font-extrabold text-xs border border-emerald-200">
+                    معتمد رسمياً
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full bg-[#ffedd5] text-[#9a3412] font-extrabold text-xs border border-orange-200">
+                    مسودة بانتظار الاعتماد
+                  </span>
+                )}
+              </div>
+
+              {selectedContract.status === "DRAFT" && canApprove && (
+                <button
+                  onClick={() => {
+                    handleApproveContract(selectedContract.id);
+                    setDetailsModalOpen(false);
+                  }}
+                  disabled={approvingId === selectedContract.id}
+                  className="bg-[#064e3b] hover:bg-[#003527] text-white font-bold px-4 py-1.5 rounded-full shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Gavel className="w-3.5 h-3.5" />
+                  <span>اعتماد العقد وترحيله</span>
+                </button>
+              )}
+            </div>
+
+            {/* Contract Entities: Client, Unit, People */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Client Box */}
+              <div className="p-3.5 rounded-2xl border border-gray-100 bg-white flex flex-col gap-1.5 shadow-2xs">
+                <span className="font-extrabold text-[#064e3b] flex items-center gap-1">
+                  <User className="w-3.5 h-3.5" />
+                  <span>بيانات العميل</span>
+                </span>
+                <span className="font-bold text-gray-800 text-sm">{selectedContract.client.name}</span>
+                <span className="text-gray-500 font-num">الهاتف: {selectedContract.client.phone}</span>
+                {selectedContract.client.notes && (
+                  <span className="text-gray-400 text-[11px] mt-1 p-2 rounded-xl bg-gray-50 border border-gray-100">
+                    ملاحظات: {selectedContract.client.notes}
+                  </span>
+                )}
+              </div>
+
+              {/* Unit Box */}
+              <div className="p-3.5 rounded-2xl border border-gray-100 bg-white flex flex-col gap-1.5 shadow-2xs">
+                <span className="font-extrabold text-[#064e3b] flex items-center gap-1">
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>بيانات الوحدة العقارية</span>
+                </span>
+                <span className="font-bold text-gray-800 text-sm">
+                  وحدة {selectedContract.unit.code} ({selectedContract.unit.project})
+                </span>
+                <span className="text-gray-500">النوع: {selectedContract.unit.type}</span>
+                <span className="text-gray-500 font-num">
+                  السعر الأصلي: {selectedContract.unitPriceSar || `${selectedContract.unitPrice} ر.س`}
+                </span>
+              </div>
+            </div>
+
+            {/* Financial Overview Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3.5 rounded-2xl bg-[#fcfdfa] border border-gray-100 font-num">
+              <div>
+                <span className="text-gray-400 text-[11px] block">السعر الأصلي</span>
+                <strong className="text-gray-800 text-sm">{selectedContract.unitPriceSar || `${selectedContract.unitPrice} ر.س`}</strong>
+              </div>
+              <div>
+                <span className="text-gray-400 text-[11px] block">نسبة الخصم</span>
+                <strong className="text-orange-700 text-sm">{selectedContract.discountPercent}%</strong>
+              </div>
+              <div>
+                <span className="text-gray-400 text-[11px] block">قيمة الخصم</span>
+                <strong className="text-orange-700 text-sm">{selectedContract.discountAmountSar || `${selectedContract.discountAmount} ر.س`}</strong>
+              </div>
+              <div>
+                <span className="text-gray-400 text-[11px] block">السعر النهائي</span>
+                <strong className="text-emerald-800 text-sm">{selectedContract.finalPriceSar || `${selectedContract.finalPrice} ر.س`}</strong>
+              </div>
+              <div>
+                <span className="text-gray-400 text-[11px] block">الدفعة الأولى</span>
+                <strong className="text-[#064e3b] text-sm">{selectedContract.downPaymentSar || `${selectedContract.downPayment} ر.س`}</strong>
+              </div>
+              <div>
+                <span className="text-gray-400 text-[11px] block">الرصيد المتبقي</span>
+                <strong className="text-orange-700 text-sm">{selectedContract.remainingBalanceSar || `${selectedContract.remainingBalance} ر.س`}</strong>
+              </div>
+            </div>
+
+            {/* Signatures & Approvals */}
+            <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100 flex flex-wrap items-center justify-between text-gray-500 text-[11px]">
+              <div>
+                مندوب المبيعات المنشئ: <strong className="text-gray-700">{selectedContract.createdBy}</strong>
+              </div>
+              {selectedContract.approvedBy && (
+                <div>
+                  تم الاعتماد بواسطة: <strong className="text-gray-700">{selectedContract.approvedBy}</strong> ({selectedContract.approvedAt?.split("T")[0]})
+                </div>
+              )}
+            </div>
+
+            {/* Full Installments Table */}
+            <div className="flex flex-col gap-2">
+              <span className="font-extrabold text-gray-700">جدول الأقساط الكامل ({selectedContract.installments.length} قسط)</span>
+              <div className="max-h-[260px] overflow-y-auto border border-gray-100 rounded-2xl">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-[#fcfdfa] text-gray-500 font-bold border-b border-gray-100">
+                    <tr className="h-9">
+                      <th className="pr-4 pl-2">#</th>
+                      <th className="px-2">تاريخ الاستحقاق</th>
+                      <th className="px-2">قيمة القسط</th>
+                      <th className="px-2">المسدد</th>
+                      <th className="pl-4 pr-2">الحالة</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 font-num">
+                    {selectedContract.installments.map((inst) => {
+                      const isOverdue = inst.status === "OVERDUE";
+                      const isPaid = inst.status === "PAID";
+                      const isPartial = inst.status === "PARTIAL" || inst.status === "PARTIALLY_PAID";
+
+                      return (
+                        <tr key={inst.id} className="h-10 hover:bg-[#fafaf8]">
+                          <td className="pr-4 pl-2 font-bold">{inst.installmentNumber}</td>
+                          <td className="px-2 text-gray-600">{inst.dueDate}</td>
+                          <td className="px-2 font-extrabold text-gray-800">{inst.amountSar || `${inst.amount} ر.س`}</td>
+                          <td className="px-2 text-gray-600">{inst.paidAmountSar || `${inst.paidAmount} ر.س`}</td>
+                          <td className="pl-4 pr-2">
+                            {isPaid ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">مسدد</span>
+                            ) : isOverdue ? (
+                              <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold">متأخر</span>
+                            ) : isPartial ? (
+                              <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold">جزئي</span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold">مستحق</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* CREATE DRAFT MODAL */}
       <Modal
@@ -805,7 +1020,7 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
               >
                 {activeReservations.map((r) => (
                   <option key={r.id} value={r.id}>
-                    وحدة {r.unit.code} ({r.unit.project}) - العميل: {r.client.name} - السعر: {(Number(BigInt(r.unit.priceHalalas) / 100n)).toLocaleString("en-US")} ر.س
+                    وحدة {r.unit.code} ({r.unit.project}) - العميل: {r.client.name} - السعر: {r.unit.priceSar || `${r.unit.price} ر.س`}
                   </option>
                 ))}
               </select>
@@ -827,7 +1042,7 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
                 type="number"
                 min="0"
                 max="5"
-                step="0.5"
+                step="0.1"
                 required
                 value={draftForm.discountPercent}
                 onChange={(e) => setDraftForm({ ...draftForm, discountPercent: parseFloat(e.target.value) || 0 })}
@@ -872,8 +1087,9 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
 
           {/* Start Date */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-gray-700">
-              تاريخ بداية العقد
+            <label className="text-xs font-bold text-gray-700 flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-gray-400" />
+              <span>تاريخ بداية العقد واستحقاق الأقساط</span>
             </label>
             <input
               type="date"
@@ -884,7 +1100,7 @@ export function ContractsView({ onNavigateTab: _onNavigateTab }: ContractsViewPr
             />
           </div>
 
-          {/* Live Invariant Box */}
+          {/* Live Invariant Calculation Box */}
           <div className="p-3.5 rounded-2xl bg-[#fcfdfa] border border-gray-100 flex flex-col gap-2 font-num text-xs">
             <div className="flex justify-between text-gray-500">
               <span>السعر بعد الخصم:</span>
