@@ -78,7 +78,9 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-ibm-plex-arabic)", "IBM Plex Sans Arabic", "sans-serif"],
+        sans: ["var(--font-alexandria)", "Alexandria", "system-ui", "sans-serif"],
+        mono: ["var(--font-plus-jakarta)", "Plus Jakarta Sans", "monospace"],
+        num: ["var(--font-plus-jakarta)", "Plus Jakarta Sans", "var(--font-alexandria)", "sans-serif"],
       },
     },
   },

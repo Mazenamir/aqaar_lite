@@ -8,8 +8,16 @@
     margin: 0;
     padding: 0;
     overscroll-behavior: none;
-    background-color: #faf8ff;
+    background-color: #eaefec;
     color: #131b2e;
+    font-family: var(--font-alexandria), "Alexandria", system-ui, sans-serif;
+  }
+
+  /* Modern tabular numbers and metric typography */
+  .font-num {
+    font-family: var(--font-plus-jakarta), "Plus Jakarta Sans", var(--font-alexandria), sans-serif;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
   }
 
   /* Modern Web Guidance: stop background scrolling under modals */

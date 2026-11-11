@@ -239,7 +239,7 @@ export default function UnitsPage() {
   const soldCount = units.filter((u) => u.status === "SOLD").length;
   const totalValuationSar = useMemo(() => {
     const totalHalalas = units.reduce((acc, u) => acc + BigInt(u.priceHalalas || "0"), 0n);
-    return (Number(totalHalalas) / 100).toLocaleString("ar-SA");
+    return (Number(totalHalalas) / 100).toLocaleString("en-US");
   }, [units]);
 
   return (
@@ -291,7 +291,7 @@ export default function UnitsPage() {
             </div>
 
             {/* Time Pill */}
-            <div className="hidden sm:flex items-center gap-1.5 bg-white border border-gray-200/80 rounded-full px-3.5 py-2 text-xs font-mono font-bold text-gray-700 shadow-xs select-none">
+            <div className="hidden sm:flex items-center gap-1.5 bg-white border border-gray-200/80 rounded-full px-3.5 py-2 text-xs font-num font-bold text-gray-700 shadow-xs select-none">
               <Clock className="w-3.5 h-3.5 text-gray-400" />
               <span>10:37 ص</span>
             </div>
@@ -345,8 +345,11 @@ export default function UnitsPage() {
 
             {/* Metric Body */}
             <div className="relative z-10 mt-3">
-              <div className="text-3xl font-extrabold text-[#002117] font-mono tracking-tight">
-                {totalCount} <span className="text-sm font-semibold text-gray-500 font-sans">وحدة</span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-3xl sm:text-4xl font-extrabold text-[#002117] font-num tracking-tight">
+                  {totalCount}
+                </span>
+                <span className="text-sm font-semibold text-gray-500 font-sans">وحدة</span>
               </div>
               <div className="text-xs text-gray-500 font-medium mt-1">
                 إجمالي الوحدات المسجلة في المحفظة
@@ -371,8 +374,11 @@ export default function UnitsPage() {
 
             {/* Metric Body */}
             <div className="relative z-10 mt-3">
-              <div className="text-3xl font-extrabold text-[#9a3412] font-mono tracking-tight">
-                {availableCount} <span className="text-sm font-semibold text-gray-500 font-sans">وحدة متاحة</span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-3xl sm:text-4xl font-extrabold text-[#9a3412] font-num tracking-tight">
+                  {availableCount}
+                </span>
+                <span className="text-sm font-semibold text-gray-500 font-sans">وحدة متاحة</span>
               </div>
               <div className="text-xs text-gray-500 font-medium mt-1">
                 متاحة للبيع والتقسيط مع دفعة أولى
@@ -423,18 +429,21 @@ export default function UnitsPage() {
 
             {/* Financial Metric */}
             <div className="relative z-10 my-2">
-              <div className="text-2xl sm:text-3xl font-extrabold text-white font-mono tracking-tight">
-                {totalValuationSar} <span className="text-xs text-emerald-300 font-sans">ر.س</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl sm:text-3xl font-extrabold text-white font-num tracking-tight">
+                  {totalValuationSar}
+                </span>
+                <span className="text-xs text-emerald-300 font-sans font-medium">ر.س</span>
               </div>
             </div>
 
             {/* Bottom Two Pill Tags */}
-            <div className="flex items-center gap-2 relative z-10">
+            <div className="flex items-center gap-2 relative z-10 font-num">
               <span className="px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-sm text-[10px] font-semibold text-white">
-                {soldCount} مباعة
+                <span className="font-bold">{soldCount}</span> مباعة
               </span>
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-400/20 backdrop-blur-sm text-[10px] font-semibold text-emerald-200">
-                {reservedCount} محجوزة
+                <span className="font-bold">{reservedCount}</span> محجوزة
               </span>
             </div>
           </div>
@@ -554,7 +563,7 @@ export default function UnitsPage() {
               <div className="bg-white/80 rounded-2xl p-3 border border-emerald-200/50 flex flex-col gap-1.5 shadow-2xs">
                 <div className="flex justify-between text-xs font-semibold text-gray-800">
                   <span>الوحدات المباعة والمعتمدة</span>
-                  <span className="font-mono text-[#064e3b] font-bold">
+                  <span className="font-num text-[#064e3b] font-bold">
                     {totalCount > 0 ? Math.round((soldCount / totalCount) * 100) : 0}%
                   </span>
                 </div>
@@ -570,7 +579,7 @@ export default function UnitsPage() {
               <div className="bg-white/80 rounded-2xl p-3 border border-emerald-200/50 flex flex-col gap-1.5 shadow-2xs">
                 <div className="flex justify-between text-xs font-semibold text-gray-800">
                   <span>الحجوزات النشطة (72h)</span>
-                  <span className="font-mono text-emerald-700 font-bold">
+                  <span className="font-num text-emerald-700 font-bold">
                     {totalCount > 0 ? Math.round((reservedCount / totalCount) * 100) : 0}%
                   </span>
                 </div>
@@ -586,7 +595,7 @@ export default function UnitsPage() {
               <div className="bg-white/80 rounded-2xl p-3 border border-emerald-200/50 flex flex-col gap-1.5 shadow-2xs">
                 <div className="flex justify-between text-xs font-semibold text-gray-800">
                   <span>المعروض المتاح للبيع</span>
-                  <span className="font-mono text-orange-600 font-bold">
+                  <span className="font-num text-orange-600 font-bold">
                     {totalCount > 0 ? Math.round((availableCount / totalCount) * 100) : 0}%
                   </span>
                 </div>
@@ -729,7 +738,7 @@ export default function UnitsPage() {
                         className="h-16 hover:bg-emerald-50/20 transition-colors group"
                       >
                         {/* Unit Code */}
-                        <td className="pr-4 pl-2 font-bold text-gray-900 font-mono text-sm">
+                        <td className="pr-4 pl-2 font-bold text-gray-900 font-num text-sm">
                           #{unit.code}
                         </td>
 
@@ -747,13 +756,13 @@ export default function UnitsPage() {
                         </td>
 
                         {/* Area & Rooms */}
-                        <td className="px-3 font-mono text-gray-600">
-                          {unit.area} م² • {unit.rooms} غرف
+                        <td className="px-3 font-num text-gray-600">
+                          <span className="font-semibold text-gray-900">{unit.area}</span> م² • <span className="font-semibold text-gray-900">{unit.rooms}</span> غرف
                         </td>
 
                         {/* Price SAR */}
-                        <td className="px-3 font-mono font-bold text-gray-900 text-sm">
-                          {unit.priceSar} <span className="text-[10px] font-normal text-gray-400">ر.س</span>
+                        <td className="px-3 font-num font-extrabold text-gray-900 text-sm">
+                          {(Number(BigInt(unit.priceHalalas || "0") / 100n)).toLocaleString("en-US")} <span className="text-[10px] font-normal text-gray-400">ر.س</span>
                         </td>
 
                         {/* Status Badge */}

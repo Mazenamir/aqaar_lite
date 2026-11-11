@@ -18,20 +18,26 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div
-      dir="rtl"
-      className="min-h-screen w-full bg-[#eaefec] flex items-center justify-center p-2 sm:p-4 lg:p-6 relative overflow-hidden font-sans"
+      className="min-h-screen w-full bg-[#eaefec] flex items-center justify-center p-3 sm:p-5 lg:p-6 relative overflow-hidden font-sans"
     >
-      {/* Ambient background pastel shapes (like in the mockup corners) */}
-      <div className="absolute -top-24 -left-24 w-80 h-80 bg-[#d9f99d]/30 rounded-full blur-3xl pointer-events-none"></div>
-      <div className="absolute -bottom-24 -right-24 w-80 h-80 bg-[#fed7aa]/35 rounded-full blur-3xl pointer-events-none"></div>
+      {/* Ambient background pastel shapes (matching mockup corners) */}
+      <div className="absolute -top-28 -left-28 w-96 h-96 bg-[#d9f99d]/35 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute -bottom-28 -right-28 w-96 h-96 bg-[#fed7aa]/40 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute top-1/2 -right-32 w-80 h-80 bg-[#bbf7d0]/25 rounded-full blur-3xl pointer-events-none"></div>
 
-      {/* Floating Rounded Tablet/Dashboard Container */}
-      <div className="w-full max-w-[1640px] min-h-[94vh] bg-[#fbfcfd] rounded-[32px] sm:rounded-[40px] lg:rounded-[48px] shadow-[0_20px_70px_-15px_rgba(0,0,0,0.07)] p-3 sm:p-5 lg:p-6 border border-white/80 flex flex-col md:flex-row gap-5 relative z-10">
-        {/* Sleek Capsule Dark Sidebar */}
+      {/* Floating Rounded Tablet/Dashboard Container (Docked dark sidebar on the left, white canvas on the right) */}
+      <div
+        dir="ltr"
+        className="w-full max-w-[1640px] min-h-[94vh] bg-[#fbfcfd] rounded-[36px] sm:rounded-[44px] lg:rounded-[48px] shadow-[0_25px_80px_-20px_rgba(0,33,23,0.12)] border border-white/80 flex flex-col sm:flex-row relative z-10 overflow-hidden"
+      >
+        {/* Sleek Docked Capsule Dark Sidebar on the Left */}
         <Sidebar />
 
-        {/* Dashboard Main Workspace */}
-        <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        {/* Dashboard Main Workspace on the Right with RTL content */}
+        <main
+          dir="rtl"
+          className="flex-1 flex flex-col min-w-0 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#fbfcfd]"
+        >
           {children}
         </main>
       </div>

@@ -109,7 +109,7 @@ export async function GET(req: Request) {
         area: u.area,
         rooms: u.rooms,
         priceHalalas: u.priceHalalas.toString(),
-        priceSar: (Number(u.priceHalalas) / 100).toLocaleString("ar-SA"),
+        priceSar: (Number(u.priceHalalas) / 100).toLocaleString("en-US"),
         status: u.status,
         createdAt: u.createdAt.toISOString(),
         reservation: activeRes
