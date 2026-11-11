@@ -1,5 +1,6 @@
 import { PrismaClient, ContractStatus, UnitStatus, ReservationStatus } from "@prisma/client";
 import { InstallmentService } from "./installment.service";
+import { ValidationError, NotFoundError, ConflictError } from "@/lib/errors/app-error";
 
 export interface CreateDraftContractInput {
   companyId: string;
@@ -19,12 +20,83 @@ export interface ApproveContractInput {
 
 export class ContractService {
   /**
+   * Lists all contracts for the tenant with full installment schedules and payment balances.
+   */
+  public static async listContracts(prisma: PrismaClient, companyId: string) {
+    const contracts = await prisma.contract.findMany({
+      where: { companyId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        unit: true,
+        client: true,
+        createdBy: { select: { name: true } },
+        approvedBy: { select: { name: true } },
+        installments: { orderBy: { installmentNumber: "asc" } },
+        payments: true,
+      },
+    });
+
+    const now = new Date();
+
+    return contracts.map((c) => {
+      const totalPaid = c.payments.reduce((sum, p) => sum + p.amountHalalas, 0n);
+      const remainingBalance = (c.finalPriceHalalas - c.downPaymentHalalas) - totalPaid;
+
+      return {
+        id: c.id,
+        contractNumber: c.contractNumber,
+        status: c.status,
+        unit: {
+          id: c.unit.id,
+          code: c.unit.code,
+          project: c.unit.project,
+          type: c.unit.type,
+        },
+        client: {
+          id: c.client.id,
+          name: c.client.name,
+          phone: c.client.phone,
+        },
+        createdBy: c.createdBy.name,
+        approvedBy: c.approvedBy?.name || null,
+        approvedAt: c.approvedAt?.toISOString() || null,
+        startDate: c.startDate.toISOString().split("T")[0]!,
+        discountPercent: c.discountPercent,
+        unitPriceHalalas: c.unitPriceHalalas.toString(),
+        finalPriceHalalas: c.finalPriceHalalas.toString(),
+        finalPriceSar: (Number(c.finalPriceHalalas) / 100).toLocaleString("ar-SA"),
+        downPaymentHalalas: c.downPaymentHalalas.toString(),
+        downPaymentSar: (Number(c.downPaymentHalalas) / 100).toLocaleString("ar-SA"),
+        totalPaidHalalas: totalPaid.toString(),
+        totalPaidSar: (Number(totalPaid) / 100).toLocaleString("ar-SA"),
+        remainingBalanceHalalas: remainingBalance.toString(),
+        remainingBalanceSar: (Number(remainingBalance) / 100).toLocaleString("ar-SA"),
+        installments: c.installments.map((inst) => {
+          const isOverdue = inst.status !== "PAID" && inst.dueDate < now;
+
+          return {
+            id: inst.id,
+            installmentNumber: inst.installmentNumber,
+            dueDate: inst.dueDate.toISOString().split("T")[0]!,
+            amountHalalas: inst.amountHalalas.toString(),
+            amountSar: (Number(inst.amountHalalas) / 100).toLocaleString("ar-SA"),
+            paidAmountHalalas: inst.paidAmountHalalas.toString(),
+            paidAmountSar: (Number(inst.paidAmountHalalas) / 100).toLocaleString("ar-SA"),
+            status: (isOverdue ? "OVERDUE" : inst.status) as "PENDING" | "PARTIAL" | "PAID" | "OVERDUE",
+            paidAt: inst.paidAt?.toISOString() || null,
+          };
+        }),
+      };
+    });
+  }
+
+  /**
    * Creates a draft contract from an active reservation.
    * Enforces max 5% discount rule.
    */
   public static async createDraft(prisma: PrismaClient, input: CreateDraftContractInput) {
     if (input.discountPercent < 0 || input.discountPercent > 5) {
-      throw new Error("نسبة الخصم المسموح بها يجب أن تتراوح بين 0% و 5% كحد أقصى");
+      throw new ValidationError("نسبة الخصم المسموح بها يجب أن تتراوح بين 0% و 5% كحد أقصى");
     }
 
     return await prisma.$transaction(async (tx) => {
@@ -40,21 +112,20 @@ export class ContractService {
       });
 
       if (!reservation) {
-        throw new Error("الحجز غير موجود أو منتهي الصلاحية أو غير تابع للشركة");
+        throw new NotFoundError("الحجز غير موجود أو منتهي الصلاحية أو غير تابع للشركة");
       }
 
       const unit = reservation.unit;
       if (unit.status !== UnitStatus.RESERVED) {
-        throw new Error("الوحدة ليست في حالة حجز مؤقت");
+        throw new ConflictError("الوحدة ليست في حالة حجز مؤقت");
       }
 
       // Calculate final price with exact discount
-      // finalPrice = unitPrice - (unitPrice * discountPercent / 100)
       const discountHalalas = (unit.priceHalalas * BigInt(input.discountPercent)) / 100n;
       const finalPriceHalalas = unit.priceHalalas - discountHalalas;
 
       if (input.downPaymentHalalas >= finalPriceHalalas) {
-        throw new Error("الدفعة الأولى لا يمكن أن تساوي أو تتجاوز السعر النهائي للوحدة");
+        throw new ValidationError("الدفعة الأولى لا يمكن أن تساوي أو تتجاوز السعر النهائي للوحدة");
       }
 
       const contractNumber = `CNT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -111,7 +182,12 @@ export class ContractService {
           action: "CONTRACT_DRAFTED",
           entityType: "Contract",
           entityId: contract.id,
-          details: JSON.stringify({ contractNumber, unitCode: unit.code, finalPriceHalalas: finalPriceHalalas.toString() }),
+          details: JSON.stringify({
+            contractNumber,
+            unitCode: unit.code,
+            finalPriceHalalas: finalPriceHalalas.toString(),
+            discountPercent: input.discountPercent,
+          }),
         },
       });
 
@@ -135,11 +211,11 @@ export class ContractService {
       });
 
       if (!contract) {
-        throw new Error("العقد غير موجود أو غير تابع للشركة");
+        throw new NotFoundError("العقد غير موجود أو غير تابع للشركة");
       }
 
       if (contract.status !== ContractStatus.DRAFT) {
-        throw new Error("العقد معتمد بالفعل ولا يمكن تعديله أو إعادة اعتماده");
+        throw new ConflictError("العقد معتمد بالفعل ولا يمكن تعديله أو إعادة اعتماده");
       }
 
       // 1. Move unit to SOLD

@@ -1,4 +1,5 @@
 import { PrismaClient, PaymentMethod, InstallmentStatus } from "@prisma/client";
+import { ValidationError, NotFoundError, ConflictError } from "@/lib/errors/app-error";
 
 export interface RecordPaymentInput {
   companyId: string;
@@ -13,12 +14,56 @@ export interface RecordPaymentInput {
 
 export class PaymentService {
   /**
+   * Lists all recorded payments for the tenant with contract details and installment allocations.
+   */
+  public static async listPayments(prisma: PrismaClient, companyId: string) {
+    const payments = await prisma.payment.findMany({
+      where: { companyId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        contract: {
+          include: {
+            unit: true,
+            client: true,
+          },
+        },
+        createdBy: {
+          select: { name: true },
+        },
+        allocations: {
+          include: {
+            installment: true,
+          },
+        },
+      },
+    });
+
+    return payments.map((p) => ({
+      id: p.id,
+      receiptNumber: p.receiptNumber,
+      contractNumber: p.contract.contractNumber,
+      unitCode: p.contract.unit.code,
+      clientName: p.contract.client.name,
+      amountHalalas: p.amountHalalas.toString(),
+      amountSar: (Number(p.amountHalalas) / 100).toLocaleString("ar-SA"),
+      method: p.method,
+      notes: p.notes || "",
+      createdByName: p.createdBy.name,
+      createdAt: p.createdAt.toISOString(),
+      allocations: p.allocations.map((a) => ({
+        installmentNumber: a.installment.installmentNumber,
+        allocatedAmountSar: (Number(a.amountHalalas) / 100).toLocaleString("ar-SA"),
+      })),
+    }));
+  }
+
+  /**
    * Records a payment and allocates it FIFO across oldest unpaid installments in a single transaction.
    * Enforces idempotency to prevent duplicate payments on network retries or double submits.
    */
   public static async recordPayment(prisma: PrismaClient, input: RecordPaymentInput) {
     if (input.amountHalalas <= 0n) {
-      throw new Error("Payment amount must be greater than zero");
+      throw new ValidationError("Payment amount must be greater than zero");
     }
 
     return await prisma.$transaction(async (tx) => {
@@ -53,11 +98,11 @@ export class PaymentService {
       });
 
       if (!contract) {
-        throw new Error("العقد غير موجود أو غير تابع للشركة");
+        throw new NotFoundError("العقد غير موجود أو غير تابع للشركة");
       }
 
       if (contract.status !== "APPROVED") {
-        throw new Error("لا يمكن تسجيل دفعات لعقد غير معتمد");
+        throw new ConflictError("لا يمكن تسجيل دفعات لعقد غير معتمد");
       }
 
       // 3. Verify total payments do not exceed contract remaining amount
@@ -65,7 +110,7 @@ export class PaymentService {
       const remainingContractBalance = (contract.finalPriceHalalas - contract.downPaymentHalalas) - totalPaidAlready;
 
       if (input.amountHalalas > remainingContractBalance) {
-        throw new Error(
+        throw new ValidationError(
           `مبلغ الدفعة يتجاوز المتبقي من العقد. المبلغ المتبقي هو: ${(Number(remainingContractBalance) / 100).toLocaleString("ar-SA")} ر.س`
         );
       }
@@ -122,6 +167,18 @@ export class PaymentService {
         });
 
         unallocatedHalalas -= allocationAmount;
+      }
+
+      // Check if all installments are now fully paid -> update contract to COMPLETED
+      const allInstallments = await tx.installment.findMany({
+        where: { contractId: contract.id },
+      });
+      const allPaid = allInstallments.every((inst) => inst.status === InstallmentStatus.PAID);
+      if (allPaid) {
+        await tx.contract.update({
+          where: { id: contract.id },
+          data: { status: "COMPLETED" },
+        });
       }
 
       // 7. Audit Log

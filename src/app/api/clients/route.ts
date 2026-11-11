@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
+import { ClientService } from "@/lib/services/client.service";
+import { getErrorMessage, getErrorStatusCode } from "@/lib/errors/app-error";
 
 const createClientSchema = z.object({
   name: z.string().min(2, "اسم العميل مطلوب"),
@@ -16,47 +18,22 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    // Agent isolation rule: Sales agent ONLY sees their own clients
-    const where: any = {
-      companyId: user.companyId,
-    };
-
-    if (user.role === "SALES_AGENT") {
-      where.createdById = user.id;
-    }
-
-    const clients = await prisma.client.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      include: {
-        createdBy: {
-          select: { name: true },
-        },
-        reservations: {
-          where: { status: "ACTIVE" },
-          select: { id: true },
-        },
-        contracts: {
-          select: { id: true },
-        },
-      },
-    });
+    const clients = await ClientService.listClients(
+      prisma,
+      user.companyId,
+      user.id,
+      user.role
+    );
 
     return NextResponse.json({
       success: true,
-      data: clients.map((c) => ({
-        id: c.id,
-        name: c.name,
-        phone: c.phone,
-        notes: c.notes || "",
-        createdByName: c.createdBy.name,
-        activeReservationsCount: c.reservations.length,
-        contractsCount: c.contracts.length,
-        createdAt: c.createdAt.toISOString(),
-      })),
+      data: clients,
     });
-  } catch (error) {
-    return NextResponse.json({ success: false, error: "فشل استرجاع العملاء" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { success: false, error: getErrorMessage(error) },
+      { status: getErrorStatusCode(error) }
+    );
   }
 }
 
@@ -69,19 +46,16 @@ export async function POST(req: Request) {
     const result = createClientSchema.safeParse(body);
 
     if (!result.success) {
-      return NextResponse.json({ success: false, error: "بيانات العميل غير صحيحة" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: result.error.issues[0]?.message || "بيانات العميل غير صحيحة" },
+        { status: 400 }
+      );
     }
 
-    const { name, phone, notes } = result.data;
-
-    const client = await prisma.client.create({
-      data: {
-        companyId: user!.companyId,
-        createdById: user!.id,
-        name,
-        phone,
-        notes: notes || null,
-      },
+    const client = await ClientService.createClient(prisma, {
+      companyId: user!.companyId,
+      createdById: user!.id,
+      ...result.data,
     });
 
     return NextResponse.json(
@@ -91,7 +65,10 @@ export async function POST(req: Request) {
       },
       { status: 201 }
     );
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "فشل إضافة العميل" }, { status: 400 });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { success: false, error: getErrorMessage(error) },
+      { status: getErrorStatusCode(error) }
+    );
   }
 }

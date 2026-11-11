@@ -1,5 +1,5 @@
-import UnitsPage from "./units/page";
+import { DashboardSPA } from "@/components/DashboardSPA";
 
 export default function HomePage() {
-  return <UnitsPage />;
+  return <DashboardSPA initialTab="units" />;
 }

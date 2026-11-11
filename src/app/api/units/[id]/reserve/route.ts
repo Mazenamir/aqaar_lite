@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { ReservationService } from "@/lib/services/reservation.service";
+import { getErrorMessage, getErrorStatusCode } from "@/lib/errors/app-error";
 
 const reserveSchema = z.object({
   clientId: z.string().min(1, "يرجى اختيار العميل"),
@@ -45,7 +46,10 @@ export async function POST(
       },
       { status: 201 }
     );
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "فشل حجز الوحدة" }, { status: 400 });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { success: false, error: getErrorMessage(error) },
+      { status: getErrorStatusCode(error) }
+    );
   }
 }

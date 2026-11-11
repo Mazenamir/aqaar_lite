@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { ContractService } from "@/lib/services/contract.service";
+import { getErrorMessage, getErrorStatusCode } from "@/lib/errors/app-error";
 
 export async function POST(
   _req: Request,
@@ -27,7 +28,10 @@ export async function POST(
         status: contract.status,
       },
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "فشل اعتماد العقد" }, { status: 400 });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { success: false, error: getErrorMessage(error) },
+      { status: getErrorStatusCode(error) }
+    );
   }
 }

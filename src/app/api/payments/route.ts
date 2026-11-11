@@ -5,6 +5,7 @@ import { AuthService } from "@/lib/auth";
 import { PaymentService } from "@/lib/services/payment.service";
 import { sarToHalalas } from "@/lib/money";
 import { PaymentMethod } from "@prisma/client";
+import { getErrorMessage, getErrorStatusCode } from "@/lib/errors/app-error";
 
 const recordPaymentSchema = z.object({
   contractId: z.string().min(1, "معرف العقد مطلوب"),
@@ -21,48 +22,14 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const payments = await prisma.payment.findMany({
-      where: { companyId: user.companyId },
-      orderBy: { createdAt: "desc" },
-      include: {
-        contract: {
-          include: {
-            unit: true,
-            client: true,
-          },
-        },
-        createdBy: {
-          select: { name: true },
-        },
-        allocations: {
-          include: {
-            installment: true,
-          },
-        },
-      },
-    });
+    const payments = await PaymentService.listPayments(prisma, user.companyId);
 
-    const formatted = payments.map((p) => ({
-      id: p.id,
-      receiptNumber: p.receiptNumber,
-      contractNumber: p.contract.contractNumber,
-      unitCode: p.contract.unit.code,
-      clientName: p.contract.client.name,
-      amountHalalas: p.amountHalalas.toString(),
-      amountSar: (Number(p.amountHalalas) / 100).toLocaleString("ar-SA"),
-      method: p.method,
-      notes: p.notes || "",
-      createdByName: p.createdBy.name,
-      createdAt: p.createdAt.toISOString(),
-      allocations: p.allocations.map((a) => ({
-        installmentNumber: a.installment.installmentNumber,
-        allocatedAmountSar: (Number(a.amountHalalas) / 100).toLocaleString("ar-SA"),
-      })),
-    }));
-
-    return NextResponse.json({ success: true, data: formatted });
-  } catch (error) {
-    return NextResponse.json({ success: false, error: "فشل استرجاع المدفوعات" }, { status: 500 });
+    return NextResponse.json({ success: true, data: payments });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { success: false, error: getErrorMessage(error) },
+      { status: getErrorStatusCode(error) }
+    );
   }
 }
 
@@ -100,12 +67,16 @@ export async function POST(req: Request) {
         data: {
           id: paymentResult.payment.id,
           receiptNumber: paymentResult.payment.receiptNumber,
+          amountHalalas: paymentResult.payment.amountHalalas.toString(),
           isDuplicate: paymentResult.isDuplicate,
         },
       },
       { status: 201 }
     );
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "فشل تسجيل الدفعة" }, { status: 400 });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { success: false, error: getErrorMessage(error) },
+      { status: getErrorStatusCode(error) }
+    );
   }
 }

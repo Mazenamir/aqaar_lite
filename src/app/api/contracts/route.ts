@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
 import { ContractService } from "@/lib/services/contract.service";
 import { sarToHalalas } from "@/lib/money";
+import { getErrorMessage, getErrorStatusCode } from "@/lib/errors/app-error";
 
 const draftContractSchema = z.object({
   reservationId: z.string().min(1, "معرف الحجز مطلوب"),
@@ -20,76 +21,14 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const contracts = await prisma.contract.findMany({
-      where: { companyId: user.companyId },
-      orderBy: { createdAt: "desc" },
-      include: {
-        unit: true,
-        client: true,
-        createdBy: { select: { name: true } },
-        approvedBy: { select: { name: true } },
-        installments: { orderBy: { installmentNumber: "asc" } },
-        payments: true,
-      },
-    });
+    const contracts = await ContractService.listContracts(prisma, user.companyId);
 
-    const now = new Date();
-
-    const formatted = contracts.map((c) => {
-      const totalPaid = c.payments.reduce((sum, p) => sum + p.amountHalalas, 0n);
-      const remainingBalance = (c.finalPriceHalalas - c.downPaymentHalalas) - totalPaid;
-
-      return {
-        id: c.id,
-        contractNumber: c.contractNumber,
-        status: c.status,
-        unit: {
-          id: c.unit.id,
-          code: c.unit.code,
-          project: c.unit.project,
-          type: c.unit.type,
-        },
-        client: {
-          id: c.client.id,
-          name: c.client.name,
-          phone: c.client.phone,
-        },
-        createdBy: c.createdBy.name,
-        approvedBy: c.approvedBy?.name || null,
-        approvedAt: c.approvedAt?.toISOString() || null,
-        startDate: c.startDate.toISOString().split("T")[0],
-        discountPercent: c.discountPercent,
-        unitPriceHalalas: c.unitPriceHalalas.toString(),
-        finalPriceHalalas: c.finalPriceHalalas.toString(),
-        finalPriceSar: (Number(c.finalPriceHalalas) / 100).toLocaleString("ar-SA"),
-        downPaymentHalalas: c.downPaymentHalalas.toString(),
-        downPaymentSar: (Number(c.downPaymentHalalas) / 100).toLocaleString("ar-SA"),
-        totalPaidHalalas: totalPaid.toString(),
-        totalPaidSar: (Number(totalPaid) / 100).toLocaleString("ar-SA"),
-        remainingBalanceHalalas: remainingBalance.toString(),
-        remainingBalanceSar: (Number(remainingBalance) / 100).toLocaleString("ar-SA"),
-        installments: c.installments.map((inst) => {
-          // Check if overdue: dueDate in past & not paid
-          const isOverdue = inst.status !== "PAID" && inst.dueDate < now;
-
-          return {
-            id: inst.id,
-            installmentNumber: inst.installmentNumber,
-            dueDate: inst.dueDate.toISOString().split("T")[0],
-            amountHalalas: inst.amountHalalas.toString(),
-            amountSar: (Number(inst.amountHalalas) / 100).toLocaleString("ar-SA"),
-            paidAmountHalalas: inst.paidAmountHalalas.toString(),
-            paidAmountSar: (Number(inst.paidAmountHalalas) / 100).toLocaleString("ar-SA"),
-            status: isOverdue ? "OVERDUE" : inst.status,
-            paidAt: inst.paidAt?.toISOString() || null,
-          };
-        }),
-      };
-    });
-
-    return NextResponse.json({ success: true, data: formatted });
-  } catch (error) {
-    return NextResponse.json({ success: false, error: "فشل استرجاع العقود" }, { status: 500 });
+    return NextResponse.json({ success: true, data: contracts });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { success: false, error: getErrorMessage(error) },
+      { status: getErrorStatusCode(error) }
+    );
   }
 }
 
@@ -111,6 +50,8 @@ export async function POST(req: Request) {
     const { reservationId, discountPercent, downPaymentSar, installmentCount, startDate } = result.data;
     const downPaymentHalalas = sarToHalalas(downPaymentSar);
 
+    const parsedStartDate = startDate ? new Date(startDate) : new Date();
+
     const contract = await ContractService.createDraft(prisma, {
       companyId: user!.companyId,
       reservationId,
@@ -118,7 +59,7 @@ export async function POST(req: Request) {
       discountPercent,
       downPaymentHalalas,
       installmentCount,
-      startDate: startDate ? new Date(startDate) : new Date(),
+      startDate: parsedStartDate,
     });
 
     return NextResponse.json(
@@ -128,11 +69,15 @@ export async function POST(req: Request) {
           id: contract.id,
           contractNumber: contract.contractNumber,
           finalPriceHalalas: contract.finalPriceHalalas.toString(),
+          status: contract.status,
         },
       },
       { status: 201 }
     );
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "فشل إنشاء مسودة العقد" }, { status: 400 });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { success: false, error: getErrorMessage(error) },
+      { status: getErrorStatusCode(error) }
+    );
   }
 }

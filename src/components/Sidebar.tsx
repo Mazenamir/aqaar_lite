@@ -9,9 +9,7 @@ import {
   ShieldCheck, 
   LogOut,
   User,
-  Home,
-  Calendar,
-  Layers,
+  Home
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -23,7 +21,12 @@ interface UserProfile {
   companyName: string;
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  activeTab?: string;
+  onTabChange?: (tab: string, href: string) => void;
+}
+
+export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -55,14 +58,12 @@ export function Sidebar() {
   };
 
   const navigationItems = [
-    { name: "نظرة عامة", href: "/overview", icon: Layers },
-    { name: "الوحدات العقارية", href: "/units", icon: Home },
-    { name: "المواعيد والمعاينات", href: "/schedule", icon: Calendar },
-    { name: "العقود والأقساط", href: "/contracts", icon: FileText },
-    { name: "إدارة العملاء", href: "/clients", icon: Users },
-    { name: "المدفوعات والتحصيل", href: "/payments", icon: CreditCard },
+    { id: "units", name: "الوحدات العقارية", href: "/units", icon: Home },
+    { id: "clients", name: "إدارة العملاء", href: "/clients", icon: Users },
+    { id: "contracts", name: "العقود والأقساط", href: "/contracts", icon: FileText },
+    { id: "payments", name: "المدفوعات والتحصيل", href: "/payments", icon: CreditCard },
     ...(user?.role === "COMPANY_ADMIN"
-      ? [{ name: "سجل العمليات والرقابة", href: "/audit", icon: ShieldCheck }]
+      ? [{ id: "audit", name: "سجل العمليات والرقابة", href: "/audit", icon: ShieldCheck }]
       : []),
   ];
 
@@ -72,7 +73,13 @@ export function Sidebar() {
       <div className="flex flex-col items-center px-3">
         <Link
           href="/units"
-          className="w-12 h-12 rounded-full bg-[#031810] border border-emerald-500/20 flex items-center justify-center shadow-lg hover:scale-105 transition-transform"
+          onClick={(e) => {
+            if (onTabChange) {
+              e.preventDefault();
+              onTabChange("units", "/units");
+            }
+          }}
+          className="w-12 h-12 rounded-full bg-[#031810] border border-emerald-500/20 flex items-center justify-center shadow-lg hover:scale-105 transition-transform cursor-pointer"
           title="عقار لايت"
         >
           <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white">
@@ -85,7 +92,9 @@ export function Sidebar() {
       <nav className="w-full flex sm:flex-col items-center gap-1.5 my-auto py-4">
         {navigationItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href || (item.href === "/units" && pathname === "/");
+          const isActive = activeTab
+            ? activeTab === item.id
+            : pathname === item.href || (item.href === "/units" && pathname === "/");
 
           if (isActive) {
             return (
@@ -124,8 +133,14 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={(e) => {
+                if (onTabChange) {
+                  e.preventDefault();
+                  onTabChange(item.id, item.href);
+                }
+              }}
               title={item.name}
-              className="relative group w-12 h-12 rounded-2xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all"
+              className="relative group w-12 h-12 rounded-2xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
             >
               <Icon className="w-5 h-5" />
 

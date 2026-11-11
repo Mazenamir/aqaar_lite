@@ -1,5 +1,6 @@
-import { PrismaClient, UnitStatus, ReservationStatus } from "@prisma/client";
+import { PrismaClient, UnitStatus, ReservationStatus, UserRole, Prisma } from "@prisma/client";
 import { addHours } from "date-fns";
+import { ConflictError, NotFoundError } from "@/lib/errors/app-error";
 
 export interface CreateReservationInput {
   companyId: string;
@@ -53,7 +54,7 @@ export class ReservationService {
   /**
    * Concurrency-safe reservation creation.
    * Uses an atomic conditional update inside a transaction to guarantee that only ONE
-   * concurrent agent succeeds, while the other receives a clear failure response.
+   * concurrent agent succeeds, while the other receives a clear conflict failure response.
    */
   public static async createReservation(prisma: PrismaClient, input: CreateReservationInput) {
     // Sweep any expired reservations first
@@ -73,7 +74,7 @@ export class ReservationService {
       });
 
       if (updateResult.count === 0) {
-        throw new Error("عذراً، الوحدة غير متاحة للحجز حالياً أو تم حجزها من قبل مندوب آخر.");
+        throw new ConflictError("عذراً، الوحدة غير متاحة للحجز حالياً أو تم حجزها من قبل مندوب آخر.");
       }
 
       // Check client ownership or tenant
@@ -85,7 +86,7 @@ export class ReservationService {
       });
 
       if (!client) {
-        throw new Error("العميل غير موجود أو لا ينتمي لشركتك");
+        throw new NotFoundError("العميل غير موجود أو لا ينتمي لشركتك");
       }
 
       // 72-hour validity
@@ -116,5 +117,63 @@ export class ReservationService {
 
       return reservation;
     });
+  }
+
+  /**
+   * Retrieves active, non-expired reservations for contract creation.
+   * Scoped by tenant and agent.
+   */
+  public static async listActiveReservations(
+    prisma: PrismaClient,
+    companyId: string,
+    userId: string,
+    userRole: UserRole
+  ) {
+    await this.autoExpireReservations(prisma, companyId);
+
+    const where: Prisma.ReservationWhereInput = {
+      companyId,
+      status: ReservationStatus.ACTIVE,
+      expiresAt: { gt: new Date() },
+      contracts: {
+        none: {
+          status: { in: ["DRAFT", "APPROVED", "COMPLETED"] },
+        },
+      },
+    };
+
+    if (userRole === UserRole.SALES_AGENT) {
+      where.createdById = userId;
+    }
+
+    const reservations = await prisma.reservation.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        unit: true,
+        client: true,
+        createdBy: { select: { name: true } },
+      },
+    });
+
+    return reservations.map((r) => ({
+      id: r.id,
+      expiresAt: r.expiresAt.toISOString(),
+      unit: {
+        id: r.unit.id,
+        code: r.unit.code,
+        project: r.unit.project,
+        type: r.unit.type,
+        priceHalalas: r.unit.priceHalalas.toString(),
+        priceSar: (Number(r.unit.priceHalalas) / 100).toLocaleString("ar-SA"),
+        rawPriceNumber: Number(r.unit.priceHalalas) / 100,
+      },
+      client: {
+        id: r.client.id,
+        name: r.client.name,
+        phone: r.client.phone,
+      },
+      agentName: r.createdBy.name,
+    }));
   }
 }

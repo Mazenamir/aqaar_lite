@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { PrismaClient, UserRole } from "@prisma/client";
 import { addDays } from "date-fns";
+import { UnauthorizedError, ForbiddenError } from "./errors/app-error";
 
 const SESSION_COOKIE_NAME = "aqar_session_token";
 
@@ -92,11 +93,11 @@ export class AuthService {
    */
   public static requireRole(user: AuthenticatedUser | null, allowedRoles: UserRole[]): AuthenticatedUser {
     if (!user) {
-      throw new Error("UNAUTHORIZED: يرجى تسجيل الدخول أولاً");
+      throw new UnauthorizedError();
     }
 
     if (!allowedRoles.includes(user.role)) {
-      throw new Error("FORBIDDEN: ليس لديك الصلاحية الكافية لتنفيذ هذا الإجراء");
+      throw new ForbiddenError();
     }
 
     return user;

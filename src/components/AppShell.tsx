@@ -5,10 +5,12 @@ import { Sidebar } from "./Sidebar";
 
 interface AppShellProps {
   children: React.ReactNode;
+  activeTab?: string;
+  onTabChange?: (tab: string, href: string) => void;
   breadcrumbTitle?: string;
 }
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, activeTab, onTabChange }: AppShellProps) {
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
 
@@ -31,7 +33,7 @@ export function AppShell({ children }: AppShellProps) {
         className="w-full max-w-[1640px] min-h-[94vh] bg-[#fbfcfd] rounded-[36px] sm:rounded-[44px] lg:rounded-[48px] shadow-[0_25px_80px_-20px_rgba(0,33,23,0.12)] border border-white/80 flex flex-col sm:flex-row relative z-10 overflow-hidden"
       >
         {/* Sleek Docked Capsule Dark Sidebar on the Left */}
-        <Sidebar />
+        <Sidebar activeTab={activeTab} onTabChange={onTabChange} />
 
         {/* Dashboard Main Workspace on the Right with RTL content */}
         <main

@@ -1,37 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthService } from "@/lib/auth";
+import { AuditService } from "@/lib/services/audit.service";
+import { getErrorMessage, getErrorStatusCode } from "@/lib/errors/app-error";
 
 export async function GET() {
   try {
     const user = await AuthService.getCurrentUser(prisma);
     AuthService.requireRole(user, ["COMPANY_ADMIN"]);
 
-    const logs = await prisma.auditLog.findMany({
-      where: { companyId: user!.companyId },
-      orderBy: { createdAt: "desc" },
-      include: {
-        user: {
-          select: { name: true, role: true },
-        },
-      },
-      take: 100,
-    });
+    const logs = await AuditService.listAuditLogs(prisma, user!.companyId);
 
-    const formatted = logs.map((log) => ({
-      id: log.id,
-      action: log.action,
-      entityType: log.entityType,
-      entityId: log.entityId,
-      details: log.details,
-      ipAddress: log.ipAddress || "Internal Server",
-      userName: log.user?.name || "النظام الأمني",
-      userRole: log.user?.role || "SYSTEM",
-      createdAt: log.createdAt.toISOString(),
-    }));
-
-    return NextResponse.json({ success: true, data: formatted });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "فشل استرجاع سجل التدقيق" }, { status: 400 });
+    return NextResponse.json({ success: true, data: logs });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { success: false, error: getErrorMessage(error) },
+      { status: getErrorStatusCode(error) }
+    );
   }
 }
