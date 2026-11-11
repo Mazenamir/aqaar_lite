@@ -101,9 +101,9 @@ export default function UnitsPage() {
       const data = await res.json();
 
       if (data.success) {
-        setUnits(data.data);
-        setTotalPages(data.pagination.totalPages);
-        setTotalCount(data.pagination.total);
+        setUnits(data.data || []);
+        setTotalPages(data.pagination?.totalPages ?? 1);
+        setTotalCount(data.pagination?.total ?? (data.data?.length || 0));
       }
     } catch (e) {
       console.error(e);
