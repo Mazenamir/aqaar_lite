@@ -438,7 +438,7 @@ export class UnitService {
           data: {
             companyId: input.companyId,
             userId: input.updatedById,
-            action: "PRICE_CHANGE",
+            action: "UNIT_PRICE_CHANGED",
             entityType: "Unit",
             entityId: unit.id,
             details: JSON.stringify({

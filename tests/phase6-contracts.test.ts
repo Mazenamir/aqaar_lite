@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient, UserRole, UnitStatus, ReservationStatus, ContractStatus, Prisma } from "@prisma/client";
 import { ContractService } from "../src/lib/services/contract.service";
-import { ReservationService } from "../src/lib/services/reservation.service";
 import { UnitService } from "../src/lib/services/unit.service";
 import { ClientService } from "../src/lib/services/client.service";
 
@@ -18,7 +17,6 @@ describe("Phase 6: Contracts & Installments Architecture, Security & Financial I
   // Company B (for Tenant Isolation)
   let compBId: string;
   let accountantB: { id: string; role: UserRole };
-  let sales1B: { id: string; role: UserRole };
 
   // Track created entities for clean cleanup
   const createdContractIds: string[] = [];
@@ -44,7 +42,6 @@ describe("Phase 6: Contracts & Installments Architecture, Security & Financial I
     compBId = compB.id;
 
     accountantB = await prisma.user.findFirstOrThrow({ where: { companyId: compBId, role: UserRole.ACCOUNTANT } });
-    sales1B = await prisma.user.findFirstOrThrow({ where: { companyId: compBId, role: UserRole.SALES_AGENT } });
   });
 
   afterAll(async () => {
@@ -129,7 +126,7 @@ describe("Phase 6: Contracts & Installments Architecture, Security & Financial I
   // 1. DRAFT CREATION & FINANCIAL RULES
   // =========================================================================
   it("1. Only SALES users can create contract drafts from their active reservation", async () => {
-    const { unit, client, reservation } = await setupActiveReservation();
+    const { reservation } = await setupActiveReservation();
 
     const draft = await ContractService.createDraft(prisma, {
       companyId: compAId,

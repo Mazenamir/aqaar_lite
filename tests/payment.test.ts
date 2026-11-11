@@ -1,86 +1,209 @@
 import { describe, it, expect } from "vitest";
+import { Prisma, InstallmentStatus } from "@prisma/client";
+import { PaymentAllocationService, InstallmentForAllocation } from "../src/lib/services/payment-allocation.service";
 
-describe("Payment Distribution - FIFO Allocation Invariant", () => {
-  interface MockInstallment {
-    id: string;
-    installmentNumber: number;
-    amountHalalas: bigint;
-    paidAmountHalalas: bigint;
-    status: "PENDING" | "PARTIAL" | "PAID";
-  }
-
-  function simulateFifoAllocation(
-    installments: MockInstallment[],
-    paymentAmountHalalas: bigint,
-    remainingContractBalance: bigint
-  ) {
-    if (paymentAmountHalalas <= 0n) {
-      throw new Error("Payment amount must be greater than zero");
-    }
-
-    if (paymentAmountHalalas > remainingContractBalance) {
-      throw new Error("Payment exceeds remaining contract balance");
-    }
-
-    let unallocated = paymentAmountHalalas;
-    const allocations: { installmentId: string; amount: bigint }[] = [];
-
-    const updatedInstallments = installments.map((inst) => ({ ...inst }));
-
-    for (const inst of updatedInstallments) {
-      if (unallocated <= 0n) break;
-      if (inst.status === "PAID") continue;
-
-      const needed = inst.amountHalalas - inst.paidAmountHalalas;
-      const allocate = unallocated >= needed ? needed : unallocated;
-
-      inst.paidAmountHalalas += allocate;
-      inst.status = inst.paidAmountHalalas === inst.amountHalalas ? "PAID" : "PARTIAL";
-
-      allocations.push({
-        installmentId: inst.id,
-        amount: allocate,
-      });
-
-      unallocated -= allocate;
-    }
-
-    return { updatedInstallments, allocations };
-  }
-
-  it("should allocate payment FIFO to the oldest unpaid installment first and mark as PAID or PARTIAL", () => {
-    const installments: MockInstallment[] = [
-      { id: "inst-1", installmentNumber: 1, amountHalalas: 1000000n, paidAmountHalalas: 0n, status: "PENDING" },
-      { id: "inst-2", installmentNumber: 2, amountHalalas: 1000000n, paidAmountHalalas: 0n, status: "PENDING" },
-      { id: "inst-3", installmentNumber: 3, amountHalalas: 1000000n, paidAmountHalalas: 0n, status: "PENDING" },
+describe("PaymentAllocationService - FIFO Allocation Mathematical Unit Tests", () => {
+  it("should fully allocate payment to a single installment when payment equals installment balance", () => {
+    const installments: InstallmentForAllocation[] = [
+      {
+        id: "inst-1",
+        installmentNumber: 1,
+        dueDate: new Date("2026-03-01"),
+        amount: new Prisma.Decimal("10000.00"),
+        paidAmount: new Prisma.Decimal("0.00"),
+        status: InstallmentStatus.PENDING,
+      },
     ];
 
-    // Pay 15,000 SAR = 1,500,000 halalas (should fully pay inst-1 and partially pay inst-2)
-    const result = simulateFifoAllocation(installments, 1500000n, 3000000n);
+    const result = PaymentAllocationService.calculateFifoAllocations(
+      installments,
+      new Prisma.Decimal("10000.00")
+    );
 
-    expect(result.updatedInstallments[0]!.paidAmountHalalas).toBe(1000000n);
-    expect(result.updatedInstallments[0]!.status).toBe("PAID");
-
-    expect(result.updatedInstallments[1]!.paidAmountHalalas).toBe(500000n);
-    expect(result.updatedInstallments[1]!.status).toBe("PARTIAL");
-
-    expect(result.updatedInstallments[2]!.paidAmountHalalas).toBe(0n);
-    expect(result.updatedInstallments[2]!.status).toBe("PENDING");
-
-    expect(result.allocations).toEqual([
-      { installmentId: "inst-1", amount: 1000000n },
-      { installmentId: "inst-2", amount: 500000n },
-    ]);
+    expect(result.allocations).toHaveLength(1);
+    expect(result.allocations[0]!.allocatedAmount.toFixed(2)).toBe("10000.00");
+    expect(result.allocations[0]!.newPaidAmount.toFixed(2)).toBe("10000.00");
+    expect(result.allocations[0]!.newStatus).toBe(InstallmentStatus.PAID);
+    expect(result.totalAllocated.toFixed(2)).toBe("10000.00");
+    expect(result.remainingUnallocated.toFixed(2)).toBe("0.00");
+    expect(result.allInstallmentsPaid).toBe(true);
   });
 
-  it("should reject payment that exceeds remaining contract balance", () => {
-    const installments: MockInstallment[] = [
-      { id: "inst-1", installmentNumber: 1, amountHalalas: 1000000n, paidAmountHalalas: 500000n, status: "PARTIAL" },
+  it("should support partial installment payment and mark status as PARTIAL", () => {
+    const installments: InstallmentForAllocation[] = [
+      {
+        id: "inst-1",
+        installmentNumber: 1,
+        dueDate: new Date("2026-03-01"),
+        amount: new Prisma.Decimal("10000.00"),
+        paidAmount: new Prisma.Decimal("0.00"),
+        status: InstallmentStatus.PENDING,
+      },
     ];
 
-    expect(() => {
-      // Remaining is 500,000 halalas, trying to pay 600,000
-      simulateFifoAllocation(installments, 600000n, 500000n);
-    }).toThrow("Payment exceeds remaining contract balance");
+    const result = PaymentAllocationService.calculateFifoAllocations(
+      installments,
+      new Prisma.Decimal("4500.00")
+    );
+
+    expect(result.allocations).toHaveLength(1);
+    expect(result.allocations[0]!.allocatedAmount.toFixed(2)).toBe("4500.00");
+    expect(result.allocations[0]!.newPaidAmount.toFixed(2)).toBe("4500.00");
+    expect(result.allocations[0]!.newStatus).toBe(InstallmentStatus.PARTIAL);
+    expect(result.totalAllocated.toFixed(2)).toBe("4500.00");
+    expect(result.remainingUnallocated.toFixed(2)).toBe("0.00");
+    expect(result.allInstallmentsPaid).toBe(false);
+  });
+
+  it("should distribute payment FIFO across multiple installments ordered by dueDate ASC", () => {
+    const installments: InstallmentForAllocation[] = [
+      {
+        id: "inst-1",
+        installmentNumber: 1,
+        dueDate: new Date("2026-01-01"),
+        amount: new Prisma.Decimal("10000.00"),
+        paidAmount: new Prisma.Decimal("0.00"),
+        status: InstallmentStatus.PENDING,
+      },
+      {
+        id: "inst-2",
+        installmentNumber: 2,
+        dueDate: new Date("2026-02-01"),
+        amount: new Prisma.Decimal("10000.00"),
+        paidAmount: new Prisma.Decimal("0.00"),
+        status: InstallmentStatus.PENDING,
+      },
+      {
+        id: "inst-3",
+        installmentNumber: 3,
+        dueDate: new Date("2026-03-01"),
+        amount: new Prisma.Decimal("10000.00"),
+        paidAmount: new Prisma.Decimal("0.00"),
+        status: InstallmentStatus.PENDING,
+      },
+    ];
+
+    // Pay 25,000.00 SAR:
+    // Should fully pay inst-1 (10,000)
+    // Should fully pay inst-2 (10,000)
+    // Should partially pay inst-3 (5,000)
+    const result = PaymentAllocationService.calculateFifoAllocations(
+      installments,
+      new Prisma.Decimal("25000.00")
+    );
+
+    expect(result.allocations).toHaveLength(3);
+
+    // Inst 1
+    expect(result.allocations[0]!.installmentId).toBe("inst-1");
+    expect(result.allocations[0]!.allocatedAmount.toFixed(2)).toBe("10000.00");
+    expect(result.allocations[0]!.newPaidAmount.toFixed(2)).toBe("10000.00");
+    expect(result.allocations[0]!.newStatus).toBe(InstallmentStatus.PAID);
+
+    // Inst 2
+    expect(result.allocations[1]!.installmentId).toBe("inst-2");
+    expect(result.allocations[1]!.allocatedAmount.toFixed(2)).toBe("10000.00");
+    expect(result.allocations[1]!.newPaidAmount.toFixed(2)).toBe("10000.00");
+    expect(result.allocations[1]!.newStatus).toBe(InstallmentStatus.PAID);
+
+    // Inst 3
+    expect(result.allocations[2]!.installmentId).toBe("inst-3");
+    expect(result.allocations[2]!.allocatedAmount.toFixed(2)).toBe("5000.00");
+    expect(result.allocations[2]!.newPaidAmount.toFixed(2)).toBe("5000.00");
+    expect(result.allocations[2]!.newStatus).toBe(InstallmentStatus.PARTIAL);
+
+    // Sum invariant
+    expect(result.totalAllocated.toFixed(2)).toBe("25000.00");
+    expect(result.remainingUnallocated.toFixed(2)).toBe("0.00");
+    expect(result.allInstallmentsPaid).toBe(false);
+  });
+
+  it("should use installmentNumber as a stable tie-breaker when due dates are identical", () => {
+    const installments: InstallmentForAllocation[] = [
+      {
+        id: "inst-b",
+        installmentNumber: 2,
+        dueDate: new Date("2026-04-01"),
+        amount: new Prisma.Decimal("5000.00"),
+        paidAmount: new Prisma.Decimal("0.00"),
+        status: InstallmentStatus.PENDING,
+      },
+      {
+        id: "inst-a",
+        installmentNumber: 1,
+        dueDate: new Date("2026-04-01"), // Identical dueDate
+        amount: new Prisma.Decimal("5000.00"),
+        paidAmount: new Prisma.Decimal("0.00"),
+        status: InstallmentStatus.PENDING,
+      },
+    ];
+
+    const result = PaymentAllocationService.calculateFifoAllocations(
+      installments,
+      new Prisma.Decimal("6000.00")
+    );
+
+    // inst-1 must be prioritized before inst-2
+    expect(result.allocations[0]!.installmentId).toBe("inst-a");
+    expect(result.allocations[0]!.allocatedAmount.toFixed(2)).toBe("5000.00");
+    expect(result.allocations[0]!.newStatus).toBe(InstallmentStatus.PAID);
+
+    expect(result.allocations[1]!.installmentId).toBe("inst-b");
+    expect(result.allocations[1]!.allocatedAmount.toFixed(2)).toBe("1000.00");
+    expect(result.allocations[1]!.newStatus).toBe(InstallmentStatus.PARTIAL);
+  });
+
+  it("should skip already fully paid installments and allocate only to outstanding balance", () => {
+    const installments: InstallmentForAllocation[] = [
+      {
+        id: "inst-1",
+        installmentNumber: 1,
+        dueDate: new Date("2026-01-01"),
+        amount: new Prisma.Decimal("10000.00"),
+        paidAmount: new Prisma.Decimal("10000.00"), // Already fully paid
+        status: InstallmentStatus.PAID,
+      },
+      {
+        id: "inst-2",
+        installmentNumber: 2,
+        dueDate: new Date("2026-02-01"),
+        amount: new Prisma.Decimal("10000.00"),
+        paidAmount: new Prisma.Decimal("4000.00"), // Partially paid (6000 remaining)
+        status: InstallmentStatus.PARTIAL,
+      },
+    ];
+
+    const result = PaymentAllocationService.calculateFifoAllocations(
+      installments,
+      new Prisma.Decimal("6000.00")
+    );
+
+    expect(result.allocations).toHaveLength(1);
+    expect(result.allocations[0]!.installmentId).toBe("inst-2");
+    expect(result.allocations[0]!.allocatedAmount.toFixed(2)).toBe("6000.00");
+    expect(result.allocations[0]!.newPaidAmount.toFixed(2)).toBe("10000.00");
+    expect(result.allocations[0]!.newStatus).toBe(InstallmentStatus.PAID);
+    expect(result.allInstallmentsPaid).toBe(true);
+  });
+
+  it("should reject zero or negative payment amounts", () => {
+    const installments: InstallmentForAllocation[] = [
+      {
+        id: "inst-1",
+        installmentNumber: 1,
+        dueDate: new Date("2026-01-01"),
+        amount: new Prisma.Decimal("10000.00"),
+        paidAmount: new Prisma.Decimal("0.00"),
+        status: InstallmentStatus.PENDING,
+      },
+    ];
+
+    expect(() =>
+      PaymentAllocationService.calculateFifoAllocations(installments, new Prisma.Decimal("0.00"))
+    ).toThrow("مبلغ الدفعة يجب أن يكون أكبر من الصفر");
+
+    expect(() =>
+      PaymentAllocationService.calculateFifoAllocations(installments, new Prisma.Decimal("-500.00"))
+    ).toThrow("مبلغ الدفعة يجب أن يكون أكبر من الصفر");
   });
 });
