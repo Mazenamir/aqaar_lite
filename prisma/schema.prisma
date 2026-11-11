@@ -1,0 +1,271 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  COMPANY_ADMIN
+  SALES_AGENT
+  ACCOUNTANT
+}
+
+enum UnitStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+}
+
+enum ReservationStatus {
+  ACTIVE
+  EXPIRED
+  CONVERTED
+}
+
+enum ContractStatus {
+  DRAFT
+  APPROVED
+  COMPLETED
+}
+
+enum InstallmentStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+enum PaymentMethod {
+  SADAD
+  MADA
+  BANK_TRANSFER
+  CASH
+  CHEQUE
+}
+
+model Company {
+  id           String        @id @default(uuid())
+  name         String
+  crNumber     String        @unique
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  users        User[]
+  units        Unit[]
+  clients      Client[]
+  reservations Reservation[]
+  contracts    Contract[]
+  payments     Payment[]
+  auditLogs    AuditLog[]
+
+  @@map("companies")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  companyId    String
+  email        String        @unique
+  passwordHash String
+  name         String
+  role         UserRole
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessions     Session[]
+  clients      Client[]      @relation("AgentClients")
+  reservations Reservation[] @relation("AgentReservations")
+  contractsCreated  Contract[] @relation("CreatedContracts")
+  contractsApproved Contract[] @relation("ApprovedContracts")
+  payments     Payment[]
+  auditLogs    AuditLog[]
+
+  @@index([companyId])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Unit {
+  id           String        @id @default(uuid())
+  companyId    String
+  project      String        // اسم المشروع العقاري حقل نصي في الوحدة
+  code         String        // رقم الوحدة
+  type         String        // نوع الوحدة (شقة، فيلا، روف)
+  floor        String        // الطابق
+  area         Int           // المساحة بالمتر المربع
+  rooms        Int           // عدد الغرف
+  priceHalalas BigInt        // السعر بالهللة (1 ريال = 100 هللة) لمنع أخطاء float
+  status       UnitStatus    @default(AVAILABLE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+  contracts    Contract[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@map("units")
+}
+
+model Client {
+  id          String        @id @default(uuid())
+  companyId   String
+  createdById String
+  name        String
+  phone       String
+  notes       String?       // ملاحظات نصية حرة
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy   User          @relation("AgentClients", fields: [createdById], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+  contracts   Contract[]
+
+  @@index([companyId, createdById])
+  @@map("clients")
+}
+
+model Reservation {
+  id          String            @id @default(uuid())
+  companyId   String
+  unitId      String
+  clientId    String
+  createdById String
+  expiresAt   DateTime          // ينتهي بعد 72 ساعة بالضبط
+  status      ReservationStatus @default(ACTIVE)
+  createdAt   DateTime          @default(now())
+
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  unit        Unit              @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy   User              @relation("AgentReservations", fields: [createdById], references: [id], onDelete: Cascade)
+  contracts   Contract[]
+
+  @@index([companyId, unitId, status])
+  @@map("reservations")
+}
+
+model Contract {
+  id                  String         @id @default(uuid())
+  companyId           String
+  contractNumber      String
+  unitId              String
+  clientId            String
+  reservationId       String?
+  createdById         String
+  approvedById        String?
+  approvedAt          DateTime?
+  unitPriceHalalas    BigInt
+  discountPercent     Int            @default(0) // أقصاه 5%
+  finalPriceHalalas   BigInt
+  downPaymentHalalas  BigInt         // الدفعة الأولى
+  installmentCount    Int
+  status              ContractStatus @default(DRAFT)
+  startDate           DateTime
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  company             Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  unit                Unit           @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  client              Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  reservation         Reservation?   @relation(fields: [reservationId], references: [id])
+  createdBy           User           @relation("CreatedContracts", fields: [createdById], references: [id])
+  approvedBy          User?          @relation("ApprovedContracts", fields: [approvedById], references: [id])
+  installments        Installment[]
+  payments            Payment[]
+
+  @@unique([companyId, contractNumber])
+  @@index([companyId, status])
+  @@map("contracts")
+}
+
+model Installment {
+  id                String            @id @default(uuid())
+  contractId        String
+  installmentNumber Int
+  dueDate           DateTime
+  amountHalalas     BigInt            // القيمة المقررة للقسط بالهللة
+  paidAmountHalalas BigInt            @default(0) // المسدد حتى الآن بالهللة
+  status            InstallmentStatus @default(PENDING)
+  paidAt            DateTime?
+
+  contract          Contract          @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  allocations       PaymentAllocation[]
+
+  @@unique([contractId, installmentNumber])
+  @@index([contractId, status])
+  @@map("installments")
+}
+
+model Payment {
+  id              String            @id @default(uuid())
+  companyId       String
+  contractId      String
+  createdById     String
+  receiptNumber   String            // رقم السند
+  amountHalalas   BigInt            // المبلغ المسدد بالهللة
+  method          PaymentMethod
+  idempotencyKey  String            @unique // مفتاح منع التكرار لضمان عدم إنشاء دفعتين
+  notes           String?
+  createdAt       DateTime          @default(now())
+
+  company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contract        Contract          @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  createdBy       User              @relation(fields: [createdById], references: [id])
+  allocations     PaymentAllocation[]
+
+  @@unique([companyId, receiptNumber])
+  @@index([companyId, contractId])
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  id            String      @id @default(uuid())
+  paymentId     String
+  installmentId String
+  amountHalalas BigInt
+
+  payment       Payment     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  installment   Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([installmentId])
+  @@map("payment_allocations")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  companyId  String
+  userId     String?
+  action     String   // FAILED_LOGIN, PRICE_CHANGE, CONTRACT_APPROVED, PAYMENT_RECORDED
+  entityType String   // Unit, Contract, Payment, User
+  entityId   String?
+  details    String   // JSON text of action details
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, action])
+  @@index([companyId, createdAt])
+  @@map("audit_logs")
+}
