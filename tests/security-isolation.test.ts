@@ -10,6 +10,7 @@ describe("Multi-Tenant & RBAC Security Verification", () => {
     email: "agent1@riyadh.sa",
     name: "أحمد المنصور",
     role: UserRole.SALES_AGENT,
+    sessionId: "mock-session-1",
   };
 
   const company2User: AuthenticatedUser = {
@@ -19,6 +20,7 @@ describe("Multi-Tenant & RBAC Security Verification", () => {
     email: "admin@najd.sa",
     name: "سليمان النجد",
     role: UserRole.COMPANY_ADMIN,
+    sessionId: "mock-session-2",
   };
 
   it("should prevent cross-tenant access when companyIds differ", () => {

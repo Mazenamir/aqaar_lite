@@ -56,6 +56,7 @@ export async function POST(req: Request) {
       companyId: user!.companyId,
       reservationId,
       createdById: user!.id,
+      userRole: user!.role,
       discountPercent,
       downPaymentHalalas,
       installmentCount,
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
         data: {
           id: contract.id,
           contractNumber: contract.contractNumber,
-          finalPriceHalalas: contract.finalPriceHalalas.toString(),
+          finalPrice: contract.finalPrice.toFixed(2),
           status: contract.status,
         },
       },

@@ -1,12 +1,22 @@
-import { PrismaClient, UserRole, UnitStatus, ContractStatus, InstallmentStatus, PaymentMethod } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import {
+  PrismaClient,
+  Prisma,
+  UserRole,
+  UnitStatus,
+  ReservationStatus,
+  ContractStatus,
+  InstallmentStatus,
+  PaymentMethod,
+} from "@prisma/client";
+import { addDays, addHours, addMonths, endOfMonth, setDate, getDate } from "date-fns";
+import { hashPassword } from "../src/lib/security/password";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("🌱 Starting database seed...");
+  console.log("🌱 Starting database seed with Argon2id & Composite Multi-Tenancy...");
 
-  // Clean existing data
+  // Clean existing data in reverse foreign key order
   await prisma.auditLog.deleteMany({});
   await prisma.paymentAllocation.deleteMany({});
   await prisma.payment.deleteMany({});
@@ -19,294 +29,328 @@ async function main() {
   await prisma.user.deleteMany({});
   await prisma.company.deleteMany({});
 
-  const defaultPasswordHash = await bcrypt.hash("Password@123", 10);
+  const defaultPasswordHash = await hashPassword("Password123!");
 
-  // 1. Company 1: شركة الرياض العقارية
-  const company1 = await prisma.company.create({
+  // =========================================================================
+  // 1. COMPANY A: شركة الريادة الخضراء للتطوير العقاري (Primary Tenant)
+  // =========================================================================
+  const companyA = await prisma.company.create({
     data: {
-      name: "شركة الرياض العقارية",
+      name: "شركة الريادة الخضراء للتطوير العقاري",
       crNumber: "1010892341",
     },
   });
 
-  await prisma.user.create({
+  const adminA = await prisma.user.create({
     data: {
-      companyId: company1.id,
-      email: "admin@riyadh.sa",
-      name: "فهد العتيبي (مدير الشركة)",
+      companyId: companyA.id,
+      email: "admin@greenryad.sa",
+      name: "م. عبدالله التميمي (مدير الشركة)",
       passwordHash: defaultPasswordHash,
       role: UserRole.COMPANY_ADMIN,
     },
   });
 
-  const c1Accountant = await prisma.user.create({
+  const accountantA = await prisma.user.create({
     data: {
-      companyId: company1.id,
-      email: "acc@riyadh.sa",
-      name: "محمد القحطاني (محاسب مالي)",
+      companyId: companyA.id,
+      email: "accountant@greenryad.sa",
+      name: "أ. طارق العسيري (محاسب مالي)",
       passwordHash: defaultPasswordHash,
       role: UserRole.ACCOUNTANT,
     },
   });
 
-  const c1Agent1 = await prisma.user.create({
+  const agentA1 = await prisma.user.create({
     data: {
-      companyId: company1.id,
-      email: "agent1@riyadh.sa",
+      companyId: companyA.id,
+      email: "agent1@greenryad.sa",
       name: "أحمد المنصور (مندوب مبيعات 1)",
       passwordHash: defaultPasswordHash,
       role: UserRole.SALES_AGENT,
     },
   });
 
-  const c1Agent2 = await prisma.user.create({
+  const agentA2 = await prisma.user.create({
     data: {
-      companyId: company1.id,
-      email: "agent2@riyadh.sa",
-      name: "سعود الحربي (مندوب مبيعات 2)",
+      companyId: companyA.id,
+      email: "agent2@greenryad.sa",
+      name: "سارة الدوسري (مندوب مبيعات 2)",
       passwordHash: defaultPasswordHash,
       role: UserRole.SALES_AGENT,
     },
   });
 
-  // Units for Company 1
-  await prisma.unit.create({
+  // Units for Company A
+  const unitA1 = await prisma.unit.create({
     data: {
-      companyId: company1.id,
+      companyId: companyA.id,
       project: "مجمع النخيل ريزيدنس",
       code: "A-101",
       type: "شقة ديلوكس",
       floor: "الدور الأول",
       area: 185,
       rooms: 4,
-      priceHalalas: BigInt(92000000), // 920,000 SAR
+      price: new Prisma.Decimal("920000.00"),
       status: UnitStatus.AVAILABLE,
     },
   });
 
-  await prisma.unit.create({
+  const unitA2 = await prisma.unit.create({
     data: {
-      companyId: company1.id,
+      companyId: companyA.id,
       project: "مجمع النخيل ريزيدنس",
       code: "B-204",
       type: "بنتهاوس فاخر",
       floor: "الدور الثاني",
       area: 240,
       rooms: 5,
-      priceHalalas: BigInt(145000000), // 1,450,000 SAR
-      status: UnitStatus.AVAILABLE,
+      price: new Prisma.Decimal("1450000.00"),
+      status: UnitStatus.RESERVED,
+    },
+  });
+
+  const unitA3 = await prisma.unit.create({
+    data: {
+      companyId: companyA.id,
+      project: "أبراج العليا ريزيدنس",
+      code: "C-305",
+      type: "شقة استوديو فاخر",
+      floor: "الدور الثالث",
+      area: 95,
+      rooms: 2,
+      price: new Prisma.Decimal("580000.00"),
+      status: UnitStatus.SOLD,
     },
   });
 
   await prisma.unit.create({
     data: {
-      companyId: company1.id,
-      project: "فلل ديار اليرموك",
-      code: "V-01",
-      type: "فيلا مستقلة",
-      floor: "أرضي + أول",
-      area: 380,
+      companyId: companyA.id,
+      project: "أبراج العليا ريزيدنس",
+      code: "D-401",
+      type: "فيلا روف",
+      floor: "الدور الرابع",
+      area: 320,
       rooms: 6,
-      priceHalalas: BigInt(235000000), // 2,350,000 SAR
+      price: new Prisma.Decimal("2100000.00"),
       status: UnitStatus.AVAILABLE,
     },
   });
 
-  const u4 = await prisma.unit.create({
+  // Clients for Company A
+  const clientA1 = await prisma.client.create({
     data: {
-      companyId: company1.id,
-      project: "برج الأندلس السكني",
-      code: "C-101",
-      type: "استوديو تنفيذي",
-      floor: "الدور الثالث",
-      area: 95,
-      rooms: 2,
-      priceHalalas: BigInt(54000000), // 540,000 SAR
-      status: UnitStatus.SOLD,
-    },
-  });
-
-  // Clients for Agent 1
-  const cl1 = await prisma.client.create({
-    data: {
-      companyId: company1.id,
-      createdById: c1Agent1.id,
-      name: "عبدالله بن فهد الشمري",
+      companyId: companyA.id,
+      createdById: agentA1.id,
+      name: "خالد بن عبدالعزيز الشمري",
       phone: "0501234567",
-      notes: "مهتم بشقق النخيل في الأدوار العليا، ميزانيته جاهزة للتمويل السريع.",
+      notes: "مهتم بوحدات النخيل ريزيدنس - دفع كاش أو أقساط ميسرة",
     },
   });
 
-  await prisma.client.create({
+  const clientA2 = await prisma.client.create({
     data: {
-      companyId: company1.id,
-      createdById: c1Agent1.id,
-      name: "سارة بنت خالد القحطاني",
+      companyId: companyA.id,
+      createdById: agentA1.id,
+      name: "سلطان إبراهيم الراجحي",
       phone: "0559876543",
-      notes: "تبحث عن فيلا مستقلة في مجمع هادئ شمال الرياض.",
+      notes: "عميل VIP يبحث عن بنتهاوس للمعيشة العائلية",
     },
   });
 
-  // Client for Agent 2 (isolation verification)
   await prisma.client.create({
     data: {
-      companyId: company1.id,
-      createdById: c1Agent2.id,
-      name: "فيصل بن محمد الدوسري",
-      phone: "0543322110",
-      notes: "مستثمر يرغب بشراء وحدات متعددة للإيجار.",
+      companyId: companyA.id,
+      createdById: agentA2.id,
+      name: "منى سعد الغامدي",
+      phone: "0543219876",
+      notes: "مستثمرة عقارية تبحث عن شقق قابلة لإعادة التأجير",
     },
   });
 
-  // Contract for Unit 4 (Sold)
-  const contract1 = await prisma.contract.create({
+  // Active Reservation for Unit A2 (72 hours expiration)
+  await prisma.reservation.create({
     data: {
-      companyId: company1.id,
-      contractNumber: "CNT-2026-0891",
-      unitId: u4.id,
-      clientId: cl1.id,
-      createdById: c1Agent1.id,
-      approvedById: c1Accountant.id,
-      approvedAt: new Date("2026-01-15T10:00:00Z"),
-      unitPriceHalalas: BigInt(54000000),
-      discountPercent: 0,
-      finalPriceHalalas: BigInt(54000000), // 540,000 SAR
-      downPaymentHalalas: BigInt(18000000), // 180,000 SAR
-      installmentCount: 4,
+      companyId: companyA.id,
+      unitId: unitA2.id,
+      clientId: clientA2.id,
+      createdById: agentA1.id,
+      expiresAt: addHours(new Date(), 72),
+      status: ReservationStatus.ACTIVE,
+    },
+  });
+
+  // Approved Contract for Unit A3 (SOLD)
+  const contractA1 = await prisma.contract.create({
+    data: {
+      companyId: companyA.id,
+      contractNumber: "CNT-2026-1001",
+      unitId: unitA3.id,
+      clientId: clientA1.id,
+      createdById: agentA1.id,
+      approvedById: accountantA.id,
+      approvedAt: addDays(new Date(), -30),
+      unitPrice: new Prisma.Decimal("580000.00"),
+      discountPercent: new Prisma.Decimal("3.00"),
+      finalPrice: new Prisma.Decimal("562600.00"), // 580,000 - 3% (17,400) = 562,600
+      downPayment: new Prisma.Decimal("100000.00"),
+      installmentCount: 12,
       status: ContractStatus.APPROVED,
       startDate: new Date("2026-01-15T00:00:00Z"),
     },
   });
 
-  // 4 Installments (90,000 SAR = 9,000,000 halalas each)
-  const inst1 = await prisma.installment.create({
-    data: {
-      contractId: contract1.id,
-      installmentNumber: 1,
-      dueDate: new Date("2026-02-15T00:00:00Z"),
-      amountHalalas: BigInt(9000000),
-      paidAmountHalalas: BigInt(9000000),
-      status: InstallmentStatus.PAID,
-      paidAt: new Date("2026-02-14T00:00:00Z"),
-    },
-  });
+  // Generate Installments for Contract A1 (Remaining: 462,600 across 12 months)
+  // 462,600 / 12 = exactly 38,550.00 per month
+  const installmentBase = new Prisma.Decimal("38550.00");
+  const contractA1Installments = [];
+  const startDay = getDate(contractA1.startDate);
 
-  const inst2 = await prisma.installment.create({
-    data: {
-      contractId: contract1.id,
-      installmentNumber: 2,
-      dueDate: new Date("2026-03-15T00:00:00Z"),
-      amountHalalas: BigInt(9000000),
-      paidAmountHalalas: BigInt(9000000),
-      status: InstallmentStatus.PAID,
-      paidAt: new Date("2026-03-15T00:00:00Z"),
-    },
-  });
+  for (let i = 1; i <= 12; i++) {
+    const targetMonth = addMonths(contractA1.startDate, i);
+    const maxDays = getDate(endOfMonth(targetMonth));
+    const targetDay = Math.min(startDay, maxDays);
+    const dueDate = setDate(targetMonth, targetDay);
 
-  await prisma.installment.create({
-    data: {
-      contractId: contract1.id,
-      installmentNumber: 3,
-      dueDate: new Date("2026-04-15T00:00:00Z"),
-      amountHalalas: BigInt(9000000),
-      paidAmountHalalas: BigInt(0),
-      status: InstallmentStatus.PENDING,
-    },
-  });
+    const isPaid = i <= 2;
+    const isPartial = i === 3;
 
-  await prisma.installment.create({
-    data: {
-      contractId: contract1.id,
-      installmentNumber: 4,
-      dueDate: new Date("2026-05-15T00:00:00Z"),
-      amountHalalas: BigInt(9000000),
-      paidAmountHalalas: BigInt(0),
-      status: InstallmentStatus.PENDING,
-    },
-  });
+    let paidAmount = new Prisma.Decimal("0.00");
+    let status: InstallmentStatus = InstallmentStatus.PENDING;
+    let paidAt: Date | null = null;
 
-  // Recorded Payments
-  const p1 = await prisma.payment.create({
-    data: {
-      companyId: company1.id,
-      contractId: contract1.id,
-      createdById: c1Accountant.id,
-      receiptNumber: "REC-2026-1001",
-      amountHalalas: BigInt(9000000),
-      method: PaymentMethod.SADAD,
-      idempotencyKey: "seed-payment-key-001",
-      notes: "سداد القسط الأول عبر نظام سداد الإلكتروني",
-      createdAt: new Date("2026-02-14T10:00:00Z"),
-    },
-  });
+    if (isPaid) {
+      paidAmount = installmentBase;
+      status = InstallmentStatus.PAID;
+      paidAt = addDays(dueDate, -2);
+    } else if (isPartial) {
+      paidAmount = new Prisma.Decimal("18550.00");
+      status = InstallmentStatus.PARTIAL;
+      paidAt = addDays(dueDate, -1);
+    }
 
-  await prisma.paymentAllocation.create({
-    data: {
-      paymentId: p1.id,
-      installmentId: inst1.id,
-      amountHalalas: BigInt(9000000),
-    },
-  });
+    const inst = await prisma.installment.create({
+      data: {
+        contractId: contractA1.id,
+        installmentNumber: i,
+        dueDate,
+        amount: installmentBase,
+        paidAmount,
+        status,
+        paidAt,
+      },
+    });
+    contractA1Installments.push(inst);
+  }
 
-  const p2 = await prisma.payment.create({
+  // Payment 1 for Contract A1: Covers Installment 1 & 2 fully (77,100.00)
+  const paymentA1 = await prisma.payment.create({
     data: {
-      companyId: company1.id,
-      contractId: contract1.id,
-      createdById: c1Accountant.id,
-      receiptNumber: "REC-2026-1002",
-      amountHalalas: BigInt(9000000),
+      companyId: companyA.id,
+      contractId: contractA1.id,
+      createdById: accountantA.id,
+      receiptNumber: "REC-2026-0001",
+      amount: new Prisma.Decimal("77100.00"),
       method: PaymentMethod.BANK_TRANSFER,
-      idempotencyKey: "seed-payment-key-002",
-      notes: "تحويل بنكي مباشر لحساب الشركة في الراجحي",
-      createdAt: new Date("2026-03-15T12:00:00Z"),
+      idempotencyKey: "idemp-seed-ryad-pay-001",
+      notes: "سداد أول قسطين بموجب حوالة مصرفية رقم TR-88912",
+      createdAt: addDays(new Date(), -25),
     },
   });
 
   await prisma.paymentAllocation.create({
     data: {
-      paymentId: p2.id,
-      installmentId: inst2.id,
-      amountHalalas: BigInt(9000000),
+      paymentId: paymentA1.id,
+      installmentId: contractA1Installments[0]!.id,
+      amount: new Prisma.Decimal("38550.00"),
     },
   });
 
-  // Audit Logs for Company 1
+  await prisma.paymentAllocation.create({
+    data: {
+      paymentId: paymentA1.id,
+      installmentId: contractA1Installments[1]!.id,
+      amount: new Prisma.Decimal("38550.00"),
+    },
+  });
+
+  // Payment 2 for Contract A1: Partial payment for Installment 3 (18,550.00)
+  const paymentA2 = await prisma.payment.create({
+    data: {
+      companyId: companyA.id,
+      contractId: contractA1.id,
+      createdById: accountantA.id,
+      receiptNumber: "REC-2026-0002",
+      amount: new Prisma.Decimal("18550.00"),
+      method: PaymentMethod.MADA,
+      idempotencyKey: "idemp-seed-ryad-pay-002",
+      notes: "سداد جزئي للقسط الثالث عبر بطاقة مدى",
+      createdAt: addDays(new Date(), -5),
+    },
+  });
+
+  await prisma.paymentAllocation.create({
+    data: {
+      paymentId: paymentA2.id,
+      installmentId: contractA1Installments[2]!.id,
+      amount: new Prisma.Decimal("18550.00"),
+    },
+  });
+
+  // Audit Logs for Company A
   await prisma.auditLog.create({
     data: {
-      companyId: company1.id,
-      userId: c1Accountant.id,
+      companyId: companyA.id,
+      userId: adminA.id,
+      action: "UNIT_CREATED",
+      entityType: "Unit",
+      entityId: unitA1.id,
+      details: JSON.stringify({ code: "A-101", price: "920000.00" }),
+      ipAddress: "127.0.0.1",
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      companyId: companyA.id,
+      userId: accountantA.id,
       action: "CONTRACT_APPROVED",
       entityType: "Contract",
-      entityId: contract1.id,
-      details: JSON.stringify({ contractNumber: contract1.contractNumber, unitCode: "C-101", finalPriceHalalas: "54000000" }),
+      entityId: contractA1.id,
+      details: JSON.stringify({ contractNumber: contractA1.contractNumber, unitId: unitA3.id }),
+      ipAddress: "127.0.0.1",
     },
   });
 
   await prisma.auditLog.create({
     data: {
-      companyId: company1.id,
-      userId: c1Accountant.id,
+      companyId: companyA.id,
+      userId: accountantA.id,
       action: "PAYMENT_RECORDED",
       entityType: "Payment",
-      entityId: p1.id,
-      details: JSON.stringify({ receiptNumber: "REC-2026-1001", amountHalalas: "9000000" }),
+      entityId: paymentA1.id,
+      details: JSON.stringify({ receiptNumber: paymentA1.receiptNumber, amount: "77100.00" }),
+      ipAddress: "127.0.0.1",
     },
   });
 
 
-  // 2. Company 2: شركة ديار نجد للتطوير (Tenant Isolation)
-  const company2 = await prisma.company.create({
+  // =========================================================================
+  // 2. COMPANY B: شركة الأفق للاستثمار العقاري (Isolated Multi-Tenant Company)
+  // =========================================================================
+  const companyB = await prisma.company.create({
     data: {
-      name: "شركة ديار نجد للتطوير",
-      crNumber: "1010774422",
+      name: "شركة الأفق للاستثمار العقاري",
+      crNumber: "2050119842",
     },
   });
 
-  await prisma.user.create({
+  const adminB = await prisma.user.create({
     data: {
-      companyId: company2.id,
-      email: "admin@najd.sa",
-      name: "سليمان النجد (مدير ديار نجد)",
+      companyId: companyB.id,
+      email: "admin@horizon.sa",
+      name: "م. خالد القحطاني (مدير شركة الأفق)",
       passwordHash: defaultPasswordHash,
       role: UserRole.COMPANY_ADMIN,
     },
@@ -314,19 +358,19 @@ async function main() {
 
   await prisma.user.create({
     data: {
-      companyId: company2.id,
-      email: "acc@najd.sa",
-      name: "طارق الصالح (محاسب ديار نجد)",
+      companyId: companyB.id,
+      email: "accountant@horizon.sa",
+      name: "أ. سعد العتيبي (محاسب شركة الأفق)",
       passwordHash: defaultPasswordHash,
       role: UserRole.ACCOUNTANT,
     },
   });
 
-  const c2Agent1 = await prisma.user.create({
+  const agentB1 = await prisma.user.create({
     data: {
-      companyId: company2.id,
-      email: "agent1@najd.sa",
-      name: "ياسر الدريس (مندوب ديار نجد 1)",
+      companyId: companyB.id,
+      email: "agent1@horizon.sa",
+      name: "ريم الشمري (مندوبة مبيعات الأفق)",
       passwordHash: defaultPasswordHash,
       role: UserRole.SALES_AGENT,
     },
@@ -334,55 +378,82 @@ async function main() {
 
   await prisma.user.create({
     data: {
-      companyId: company2.id,
-      email: "agent2@najd.sa",
-      name: "خالد السالم (مندوب ديار نجد 2)",
+      companyId: companyB.id,
+      email: "agent2@horizon.sa",
+      name: "فيصل الدوسري (مندوب مبيعات الأفق)",
       passwordHash: defaultPasswordHash,
       role: UserRole.SALES_AGENT,
     },
   });
 
-  // Units for Company 2
-  await prisma.unit.create({
+  // Units for Company B
+  // Notice: Same code "A-101" to rigorously verify unique constraint is scoped to companyId!
+  const unitB1 = await prisma.unit.create({
     data: {
-      companyId: company2.id,
-      project: "أبراج نجد الفندقية",
-      code: "N-201",
-      type: "جناح تنفيذي",
-      floor: "الدور الثامن",
-      area: 120,
-      rooms: 2,
-      priceHalalas: BigInt(89000000), // 890,000 SAR
+      companyId: companyB.id,
+      project: "برج الأفق الذهبي",
+      code: "A-101",
+      type: "شقة إطلالة بحرية",
+      floor: "الدور الخامس",
+      area: 160,
+      rooms: 3,
+      price: new Prisma.Decimal("1100000.00"),
       status: UnitStatus.AVAILABLE,
     },
   });
 
   await prisma.unit.create({
     data: {
-      companyId: company2.id,
-      project: "مجمع ديار الغدير",
-      code: "G-105",
-      type: "تاون هاوس",
-      floor: "أرضي + أول",
-      area: 275,
+      companyId: companyB.id,
+      project: "برج الأفق الذهبي",
+      code: "HZ-201",
+      type: "سكاي فيلا",
+      floor: "الدور العاشر",
+      area: 280,
       rooms: 5,
-      priceHalalas: BigInt(165000000), // 1,650,000 SAR
+      price: new Prisma.Decimal("1850000.00"),
       status: UnitStatus.AVAILABLE,
     },
   });
 
-  // Client for Company 2
+  // Clients for Company B
   await prisma.client.create({
     data: {
-      companyId: company2.id,
-      createdById: c2Agent1.id,
-      name: "سلطان بن فهد الرويلي",
-      phone: "0567891234",
-      notes: "عميل خاص لشركة ديار نجد - مهتم بأبراج نجد.",
+      companyId: companyB.id,
+      createdById: agentB1.id,
+      name: "طارق بن ناصر البوعينين",
+      phone: "0561122334",
+      notes: "عميل شركة الأفق - مهتم بشقق برج الأفق الذهبي",
+    },
+  });
+
+  // Audit Log for Company B
+  await prisma.auditLog.create({
+    data: {
+      companyId: companyB.id,
+      userId: adminB.id,
+      action: "UNIT_CREATED",
+      entityType: "Unit",
+      entityId: unitB1.id,
+      details: JSON.stringify({ code: "A-101", price: "1100000.00", company: "الأفق" }),
+      ipAddress: "127.0.0.1",
     },
   });
 
   console.log("✅ Seed completed successfully!");
+  console.log("-----------------------------------------------------------------");
+  console.log("🏢 Company 1: شركة الريادة الخضراء للتطوير العقاري");
+  console.log("   Admin:       admin@greenryad.sa      (Password: Password123!)");
+  console.log("   Accountant:  accountant@greenryad.sa (Password: Password123!)");
+  console.log("   Sales Rep 1: agent1@greenryad.sa     (Password: Password123!)");
+  console.log("   Sales Rep 2: agent2@greenryad.sa     (Password: Password123!)");
+  console.log("-----------------------------------------------------------------");
+  console.log("🏢 Company 2: شركة الأفق للاستثمار العقاري (Tenant Isolation Demo)");
+  console.log("   Admin:       admin@horizon.sa        (Password: Password123!)");
+  console.log("   Accountant:  accountant@horizon.sa   (Password: Password123!)");
+  console.log("   Sales Rep 1: agent1@horizon.sa       (Password: Password123!)");
+  console.log("   Sales Rep 2: agent2@horizon.sa       (Password: Password123!)");
+  console.log("-----------------------------------------------------------------");
 }
 
 main()

@@ -1,13 +1,16 @@
-import { PrismaClient, ContractStatus, UnitStatus, ReservationStatus } from "@prisma/client";
+import { PrismaClient, Prisma, ContractStatus, UnitStatus, ReservationStatus, UserRole } from "@prisma/client";
 import { InstallmentService } from "./installment.service";
-import { ValidationError, NotFoundError, ConflictError } from "@/lib/errors/app-error";
+import { ValidationError, NotFoundError, ConflictError, ForbiddenError } from "@/lib/errors/app-error";
+import { toDecimal, formatSar, sarToHalalas } from "../money";
 
 export interface CreateDraftContractInput {
   companyId: string;
   reservationId: string;
   createdById: string;
+  userRole?: UserRole;
   discountPercent: number; // 0 to 5%
-  downPaymentHalalas: bigint;
+  downPaymentSar?: string;
+  downPaymentHalalas?: bigint;
   installmentCount: number;
   startDate: Date;
 }
@@ -39,8 +42,11 @@ export class ContractService {
     const now = new Date();
 
     return contracts.map((c) => {
-      const totalPaid = c.payments.reduce((sum, p) => sum + p.amountHalalas, 0n);
-      const remainingBalance = (c.finalPriceHalalas - c.downPaymentHalalas) - totalPaid;
+      const totalPaid = c.payments.reduce(
+        (sum, p) => sum.plus(p.amount),
+        new Prisma.Decimal("0.00")
+      );
+      const remainingBalance = c.finalPrice.minus(c.downPayment).minus(totalPaid);
 
       return {
         id: c.id,
@@ -61,16 +67,16 @@ export class ContractService {
         approvedBy: c.approvedBy?.name || null,
         approvedAt: c.approvedAt?.toISOString() || null,
         startDate: c.startDate.toISOString().split("T")[0]!,
-        discountPercent: c.discountPercent,
-        unitPriceHalalas: c.unitPriceHalalas.toString(),
-        finalPriceHalalas: c.finalPriceHalalas.toString(),
-        finalPriceSar: (Number(c.finalPriceHalalas) / 100).toLocaleString("ar-SA"),
-        downPaymentHalalas: c.downPaymentHalalas.toString(),
-        downPaymentSar: (Number(c.downPaymentHalalas) / 100).toLocaleString("ar-SA"),
-        totalPaidHalalas: totalPaid.toString(),
-        totalPaidSar: (Number(totalPaid) / 100).toLocaleString("ar-SA"),
-        remainingBalanceHalalas: remainingBalance.toString(),
-        remainingBalanceSar: (Number(remainingBalance) / 100).toLocaleString("ar-SA"),
+        discountPercent: Number(c.discountPercent),
+        unitPrice: c.unitPrice.toFixed(2),
+        finalPrice: c.finalPrice.toFixed(2),
+        finalPriceSar: formatSar(c.finalPrice),
+        downPayment: c.downPayment.toFixed(2),
+        downPaymentSar: formatSar(c.downPayment),
+        totalPaid: totalPaid.toFixed(2),
+        totalPaidSar: formatSar(totalPaid),
+        remainingBalance: remainingBalance.toFixed(2),
+        remainingBalanceSar: formatSar(remainingBalance),
         installments: c.installments.map((inst) => {
           const isOverdue = inst.status !== "PAID" && inst.dueDate < now;
 
@@ -78,10 +84,10 @@ export class ContractService {
             id: inst.id,
             installmentNumber: inst.installmentNumber,
             dueDate: inst.dueDate.toISOString().split("T")[0]!,
-            amountHalalas: inst.amountHalalas.toString(),
-            amountSar: (Number(inst.amountHalalas) / 100).toLocaleString("ar-SA"),
-            paidAmountHalalas: inst.paidAmountHalalas.toString(),
-            paidAmountSar: (Number(inst.paidAmountHalalas) / 100).toLocaleString("ar-SA"),
+            amount: inst.amount.toFixed(2),
+            amountSar: formatSar(inst.amount),
+            paidAmount: inst.paidAmount.toFixed(2),
+            paidAmountSar: formatSar(inst.paidAmount),
             status: (isOverdue ? "OVERDUE" : inst.status) as "PENDING" | "PARTIAL" | "PAID" | "OVERDUE",
             paidAt: inst.paidAt?.toISOString() || null,
           };
@@ -115,16 +121,28 @@ export class ContractService {
         throw new NotFoundError("الحجز غير موجود أو منتهي الصلاحية أو غير تابع للشركة");
       }
 
+      // Assert ownership: Sales agents can only create drafts from their own active reservations
+      if (input.userRole === "SALES_AGENT" && reservation.createdById !== input.createdById) {
+        throw new ForbiddenError("لا يحق لمندوب المبيعات إنشاء مسودة عقد لحجز مندوب آخر");
+      }
+
       const unit = reservation.unit;
       if (unit.status !== UnitStatus.RESERVED) {
         throw new ConflictError("الوحدة ليست في حالة حجز مؤقت");
       }
 
-      // Calculate final price with exact discount
-      const discountHalalas = (unit.priceHalalas * BigInt(input.discountPercent)) / 100n;
-      const finalPriceHalalas = unit.priceHalalas - discountHalalas;
+      const downPayment = input.downPaymentSar
+        ? toDecimal(input.downPaymentSar)
+        : input.downPaymentHalalas !== undefined
+        ? new Prisma.Decimal(input.downPaymentHalalas.toString()).dividedBy(100)
+        : new Prisma.Decimal("0.00");
 
-      if (input.downPaymentHalalas >= finalPriceHalalas) {
+      // Calculate final price with exact discount
+      const discountRate = new Prisma.Decimal(input.discountPercent).dividedBy(100);
+      const discountAmount = unit.price.times(discountRate);
+      const finalPrice = unit.price.minus(discountAmount);
+
+      if (downPayment.gte(finalPrice)) {
         throw new ValidationError("الدفعة الأولى لا يمكن أن تساوي أو تتجاوز السعر النهائي للوحدة");
       }
 
@@ -139,10 +157,10 @@ export class ContractService {
           clientId: reservation.clientId,
           reservationId: reservation.id,
           createdById: input.createdById,
-          unitPriceHalalas: unit.priceHalalas,
-          discountPercent: input.discountPercent,
-          finalPriceHalalas,
-          downPaymentHalalas: input.downPaymentHalalas,
+          unitPrice: unit.price,
+          discountPercent: new Prisma.Decimal(input.discountPercent.toFixed(2)),
+          finalPrice,
+          downPayment,
           installmentCount: input.installmentCount,
           status: ContractStatus.DRAFT,
           startDate: input.startDate,
@@ -151,8 +169,8 @@ export class ContractService {
 
       // Generate Installments
       const schedule = InstallmentService.calculateSchedule(
-        finalPriceHalalas,
-        input.downPaymentHalalas,
+        sarToHalalas(finalPrice.toString()),
+        sarToHalalas(downPayment.toString()),
         input.installmentCount,
         input.startDate
       );
@@ -163,7 +181,7 @@ export class ContractService {
             contractId: contract.id,
             installmentNumber: inst.installmentNumber,
             dueDate: inst.dueDate,
-            amountHalalas: inst.amountHalalas,
+            amount: inst.amount,
           },
         });
       }
@@ -185,7 +203,7 @@ export class ContractService {
           details: JSON.stringify({
             contractNumber,
             unitCode: unit.code,
-            finalPriceHalalas: finalPriceHalalas.toString(),
+            finalPrice: finalPrice.toFixed(2),
             discountPercent: input.discountPercent,
           }),
         },

@@ -1,11 +1,13 @@
-import { PrismaClient, PaymentMethod, InstallmentStatus } from "@prisma/client";
+import { PrismaClient, Prisma, PaymentMethod, InstallmentStatus } from "@prisma/client";
 import { ValidationError, NotFoundError, ConflictError } from "@/lib/errors/app-error";
+import { toDecimal, formatSar } from "../money";
 
 export interface RecordPaymentInput {
   companyId: string;
   contractId: string;
   createdById: string;
-  amountHalalas: bigint;
+  amountSar?: string;
+  amountHalalas?: bigint;
   method: PaymentMethod;
   idempotencyKey: string;
   notes?: string;
@@ -44,15 +46,16 @@ export class PaymentService {
       contractNumber: p.contract.contractNumber,
       unitCode: p.contract.unit.code,
       clientName: p.contract.client.name,
-      amountHalalas: p.amountHalalas.toString(),
-      amountSar: (Number(p.amountHalalas) / 100).toLocaleString("ar-SA"),
+      amount: p.amount.toFixed(2),
+      amountSar: formatSar(p.amount),
       method: p.method,
       notes: p.notes || "",
       createdByName: p.createdBy.name,
       createdAt: p.createdAt.toISOString(),
       allocations: p.allocations.map((a) => ({
         installmentNumber: a.installment.installmentNumber,
-        allocatedAmountSar: (Number(a.amountHalalas) / 100).toLocaleString("ar-SA"),
+        allocatedAmount: a.amount.toFixed(2),
+        allocatedAmountSar: formatSar(a.amount),
       })),
     }));
   }
@@ -62,7 +65,13 @@ export class PaymentService {
    * Enforces idempotency to prevent duplicate payments on network retries or double submits.
    */
   public static async recordPayment(prisma: PrismaClient, input: RecordPaymentInput) {
-    if (input.amountHalalas <= 0n) {
+    const paymentAmount = input.amountSar
+      ? toDecimal(input.amountSar)
+      : input.amountHalalas !== undefined
+      ? new Prisma.Decimal(input.amountHalalas.toString()).dividedBy(100)
+      : new Prisma.Decimal("0.00");
+
+    if (paymentAmount.lte(0)) {
       throw new ValidationError("Payment amount must be greater than zero");
     }
 
@@ -106,12 +115,17 @@ export class PaymentService {
       }
 
       // 3. Verify total payments do not exceed contract remaining amount
-      const totalPaidAlready = contract.payments.reduce((sum, p) => sum + p.amountHalalas, 0n);
-      const remainingContractBalance = (contract.finalPriceHalalas - contract.downPaymentHalalas) - totalPaidAlready;
+      const totalPaidAlready = contract.payments.reduce(
+        (sum, p) => sum.plus(p.amount),
+        new Prisma.Decimal("0.00")
+      );
+      const remainingContractBalance = contract.finalPrice
+        .minus(contract.downPayment)
+        .minus(totalPaidAlready);
 
-      if (input.amountHalalas > remainingContractBalance) {
+      if (paymentAmount.gt(remainingContractBalance)) {
         throw new ValidationError(
-          `مبلغ الدفعة يتجاوز المتبقي من العقد. المبلغ المتبقي هو: ${(Number(remainingContractBalance) / 100).toLocaleString("ar-SA")} ر.س`
+          `مبلغ الدفعة يتجاوز المتبقي من العقد. المبلغ المتبقي هو: ${formatSar(remainingContractBalance)}`
         );
       }
 
@@ -125,7 +139,7 @@ export class PaymentService {
           contractId: input.contractId,
           createdById: input.createdById,
           receiptNumber,
-          amountHalalas: input.amountHalalas,
+          amount: paymentAmount,
           method: input.method,
           idempotencyKey: input.idempotencyKey,
           notes: input.notes,
@@ -133,25 +147,27 @@ export class PaymentService {
       });
 
       // 6. FIFO Allocation across installments
-      let unallocatedHalalas = input.amountHalalas;
+      let unallocated = paymentAmount;
       const unpaidInstallments = contract.installments.filter(
         (inst) => inst.status !== InstallmentStatus.PAID
       );
 
       for (const inst of unpaidInstallments) {
-        if (unallocatedHalalas <= 0n) break;
+        if (unallocated.lte(0)) break;
 
-        const neededToFinish = inst.amountHalalas - inst.paidAmountHalalas;
-        const allocationAmount = unallocatedHalalas >= neededToFinish ? neededToFinish : unallocatedHalalas;
+        const neededToFinish = inst.amount.minus(inst.paidAmount);
+        const allocationAmount = unallocated.gte(neededToFinish) ? neededToFinish : unallocated;
 
-        const newPaidAmount = inst.paidAmountHalalas + allocationAmount;
-        const newStatus = newPaidAmount === inst.amountHalalas ? InstallmentStatus.PAID : InstallmentStatus.PARTIAL;
+        const newPaidAmount = inst.paidAmount.plus(allocationAmount);
+        const newStatus = newPaidAmount.equals(inst.amount)
+          ? InstallmentStatus.PAID
+          : InstallmentStatus.PARTIAL;
 
         // Update installment
         await tx.installment.update({
           where: { id: inst.id },
           data: {
-            paidAmountHalalas: newPaidAmount,
+            paidAmount: newPaidAmount,
             status: newStatus,
             paidAt: newStatus === InstallmentStatus.PAID ? new Date() : inst.paidAt,
           },
@@ -162,11 +178,11 @@ export class PaymentService {
           data: {
             paymentId: payment.id,
             installmentId: inst.id,
-            amountHalalas: allocationAmount,
+            amount: allocationAmount,
           },
         });
 
-        unallocatedHalalas -= allocationAmount;
+        unallocated = unallocated.minus(allocationAmount);
       }
 
       // Check if all installments are now fully paid -> update contract to COMPLETED
@@ -192,7 +208,7 @@ export class PaymentService {
           details: JSON.stringify({
             receiptNumber: payment.receiptNumber,
             contractId: contract.id,
-            amountHalalas: payment.amountHalalas.toString(),
+            amount: payment.amount.toFixed(2),
             method: payment.method,
           }),
         },

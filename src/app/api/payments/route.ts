@@ -67,7 +67,7 @@ export async function POST(req: Request) {
         data: {
           id: paymentResult.payment.id,
           receiptNumber: paymentResult.payment.receiptNumber,
-          amountHalalas: paymentResult.payment.amountHalalas.toString(),
+          amount: paymentResult.payment.amount.toFixed(2),
           isDuplicate: paymentResult.isDuplicate,
         },
       },

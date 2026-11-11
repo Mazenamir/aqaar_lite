@@ -1,8 +1,10 @@
 import { addMonths, endOfMonth, setDate, getDate } from "date-fns";
+import { Prisma } from "@prisma/client";
 
 export interface InstallmentCalculationResult {
   installmentNumber: number;
   dueDate: Date;
+  amount: Prisma.Decimal;
   amountHalalas: bigint;
 }
 
@@ -58,6 +60,7 @@ export class InstallmentService {
       schedule.push({
         installmentNumber: i,
         dueDate,
+        amount: new Prisma.Decimal(amountHalalas.toString()).dividedBy(100),
         amountHalalas,
       });
     }

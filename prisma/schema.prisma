@@ -67,50 +67,56 @@ model Company {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  companyId    String
-  email        String        @unique
-  passwordHash String
-  name         String
-  role         UserRole
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                String        @id @default(uuid())
+  companyId         String
+  email             String        @unique
+  passwordHash      String
+  name              String
+  role              UserRole
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
-  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sessions     Session[]
-  clients      Client[]      @relation("AgentClients")
-  reservations Reservation[] @relation("AgentReservations")
-  contractsCreated  Contract[] @relation("CreatedContracts")
-  contractsApproved Contract[] @relation("ApprovedContracts")
-  payments     Payment[]
-  auditLogs    AuditLog[]
+  company           Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessions          Session[]
+  clients           Client[]      @relation("UserClients")
+  reservations      Reservation[] @relation("UserReservations")
+  contractsCreated  Contract[]    @relation("CreatedContracts")
+  contractsApproved Contract[]    @relation("ApprovedContracts")
+  payments          Payment[]     @relation("UserPayments")
+  auditLogs         AuditLog[]
 
+  @@unique([id, companyId])
   @@index([companyId])
   @@map("users")
 }
 
 model Session {
-  id        String   @id @default(uuid())
-  userId    String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  id               String    @id @default(uuid())
+  sessionTokenHash String    @unique
+  userId           String
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  revokedAt        DateTime?
+  ipAddress        String?
+  userAgent        String?
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([sessionTokenHash])
   @@map("sessions")
 }
 
 model Unit {
   id           String        @id @default(uuid())
   companyId    String
-  project      String        // اسم المشروع العقاري حقل نصي في الوحدة
-  code         String        // رقم الوحدة
-  type         String        // نوع الوحدة (شقة، فيلا، روف)
-  floor        String        // الطابق
-  area         Int           // المساحة بالمتر المربع
-  rooms        Int           // عدد الغرف
-  priceHalalas BigInt        // السعر بالهللة (1 ريال = 100 هللة) لمنع أخطاء float
+  project      String
+  code         String
+  type         String
+  floor        String
+  area         Int
+  rooms        Int
+  price        Decimal       @db.Decimal(14, 2)
   status       UnitStatus    @default(AVAILABLE)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -120,6 +126,7 @@ model Unit {
   contracts    Contract[]
 
   @@unique([companyId, code])
+  @@unique([id, companyId])
   @@index([companyId, status])
   @@map("units")
 }
@@ -130,15 +137,16 @@ model Client {
   createdById String
   name        String
   phone       String
-  notes       String?       // ملاحظات نصية حرة
+  notes       String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdBy   User          @relation("AgentClients", fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy   User          @relation("UserClients", fields: [createdById, companyId], references: [id, companyId], onDelete: Restrict)
   reservations Reservation[]
   contracts   Contract[]
 
+  @@unique([id, companyId])
   @@index([companyId, createdById])
   @@map("clients")
 }
@@ -149,50 +157,52 @@ model Reservation {
   unitId      String
   clientId    String
   createdById String
-  expiresAt   DateTime          // ينتهي بعد 72 ساعة بالضبط
+  expiresAt   DateTime
   status      ReservationStatus @default(ACTIVE)
   createdAt   DateTime          @default(now())
 
   company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  unit        Unit              @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy   User              @relation("AgentReservations", fields: [createdById], references: [id], onDelete: Cascade)
+  unit        Unit              @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  client      Client            @relation(fields: [clientId, companyId], references: [id, companyId], onDelete: Restrict)
+  createdBy   User              @relation("UserReservations", fields: [createdById, companyId], references: [id, companyId], onDelete: Restrict)
   contracts   Contract[]
 
+  @@unique([id, companyId])
   @@index([companyId, unitId, status])
   @@map("reservations")
 }
 
 model Contract {
-  id                  String         @id @default(uuid())
-  companyId           String
-  contractNumber      String
-  unitId              String
-  clientId            String
-  reservationId       String?
-  createdById         String
-  approvedById        String?
-  approvedAt          DateTime?
-  unitPriceHalalas    BigInt
-  discountPercent     Int            @default(0) // أقصاه 5%
-  finalPriceHalalas   BigInt
-  downPaymentHalalas  BigInt         // الدفعة الأولى
-  installmentCount    Int
-  status              ContractStatus @default(DRAFT)
-  startDate           DateTime
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  id                 String         @id @default(uuid())
+  companyId          String
+  contractNumber     String
+  unitId             String
+  clientId           String
+  reservationId      String?
+  createdById        String
+  approvedById       String?
+  approvedAt         DateTime?
+  unitPrice          Decimal        @db.Decimal(14, 2)
+  discountPercent    Decimal        @default(0) @db.Decimal(5, 2)
+  finalPrice         Decimal        @db.Decimal(14, 2)
+  downPayment        Decimal        @db.Decimal(14, 2)
+  installmentCount   Int
+  status             ContractStatus @default(DRAFT)
+  startDate          DateTime
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
-  company             Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  unit                Unit           @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  client              Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  reservation         Reservation?   @relation(fields: [reservationId], references: [id])
-  createdBy           User           @relation("CreatedContracts", fields: [createdById], references: [id])
-  approvedBy          User?          @relation("ApprovedContracts", fields: [approvedById], references: [id])
-  installments        Installment[]
-  payments            Payment[]
+  company            Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  unit               Unit           @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  client             Client         @relation(fields: [clientId, companyId], references: [id, companyId], onDelete: Restrict)
+  reservation        Reservation?   @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  createdBy          User           @relation("CreatedContracts", fields: [createdById, companyId], references: [id, companyId], onDelete: Restrict)
+  approvedBy         User?          @relation("ApprovedContracts", fields: [approvedById, companyId], references: [id, companyId], onDelete: Restrict)
+  installments       Installment[]
+  payments           Payment[]
 
   @@unique([companyId, contractNumber])
+  @@unique([id, companyId])
   @@index([companyId, status])
   @@map("contracts")
 }
@@ -202,8 +212,8 @@ model Installment {
   contractId        String
   installmentNumber Int
   dueDate           DateTime
-  amountHalalas     BigInt            // القيمة المقررة للقسط بالهللة
-  paidAmountHalalas BigInt            @default(0) // المسدد حتى الآن بالهللة
+  amount            Decimal           @db.Decimal(14, 2)
+  paidAmount        Decimal           @default(0) @db.Decimal(14, 2)
   status            InstallmentStatus @default(PENDING)
   paidAt            DateTime?
 
@@ -216,23 +226,24 @@ model Installment {
 }
 
 model Payment {
-  id              String            @id @default(uuid())
-  companyId       String
-  contractId      String
-  createdById     String
-  receiptNumber   String            // رقم السند
-  amountHalalas   BigInt            // المبلغ المسدد بالهللة
-  method          PaymentMethod
-  idempotencyKey  String            @unique // مفتاح منع التكرار لضمان عدم إنشاء دفعتين
-  notes           String?
-  createdAt       DateTime          @default(now())
+  id             String              @id @default(uuid())
+  companyId      String
+  contractId     String
+  createdById    String
+  receiptNumber  String
+  amount         Decimal             @db.Decimal(14, 2)
+  method         PaymentMethod
+  idempotencyKey String              @unique
+  notes          String?
+  createdAt      DateTime            @default(now())
 
-  company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  contract        Contract          @relation(fields: [contractId], references: [id], onDelete: Restrict)
-  createdBy       User              @relation(fields: [createdById], references: [id])
-  allocations     PaymentAllocation[]
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contract       Contract            @relation(fields: [contractId, companyId], references: [id, companyId], onDelete: Restrict)
+  createdBy      User                @relation("UserPayments", fields: [createdById, companyId], references: [id, companyId], onDelete: Restrict)
+  allocations    PaymentAllocation[]
 
   @@unique([companyId, receiptNumber])
+  @@unique([id, companyId])
   @@index([companyId, contractId])
   @@map("payments")
 }
@@ -241,7 +252,7 @@ model PaymentAllocation {
   id            String      @id @default(uuid())
   paymentId     String
   installmentId String
-  amountHalalas BigInt
+  amount        Decimal     @db.Decimal(14, 2)
 
   payment       Payment     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   installment   Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
@@ -255,10 +266,10 @@ model AuditLog {
   id         String   @id @default(uuid())
   companyId  String
   userId     String?
-  action     String   // FAILED_LOGIN, PRICE_CHANGE, CONTRACT_APPROVED, PAYMENT_RECORDED
-  entityType String   // Unit, Contract, Payment, User
+  action     String
+  entityType String
   entityId   String?
-  details    String   // JSON text of action details
+  details    String
   ipAddress  String?
   createdAt  DateTime @default(now())
 
