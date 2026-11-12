@@ -1,0 +1,66 @@
+name: CI - Aqar Lite Quality & Security Verification
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  test-and-build:
+    name: Typecheck, Migrations, Test Suites & Production Build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: aqar_lite
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aqar_lite"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://postgres:postgrespassword@localhost:5432/aqar_lite?schema=public"
+      SESSION_SECRET: "ci_super_secret_session_key_for_testing_purposes_only_2026"
+      NODE_ENV: "test"
+      PORT: 3000
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Strict TypeScript Compilation (Zero Errors / No any)
+        run: npm run typecheck
+
+      - name: Apply Database Migrations
+        run: npx prisma migrate deploy
+
+      - name: Seed Initial Multi-Tenant Test Data
+        run: npx tsx prisma/seed.ts
+
+      - name: Run Automated Test Suites (Vitest)
+        run: npm test
+
+      - name: Build Next.js Production Application
+        run: npm run build
+        env:
+          NODE_ENV: "production"

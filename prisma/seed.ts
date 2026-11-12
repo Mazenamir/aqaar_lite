@@ -81,6 +81,47 @@ async function main() {
     },
   });
 
+  // Additional compatibility accounts for Company A (supporting both greenryad.sa and riyadh.sa)
+  await prisma.user.create({
+    data: {
+      companyId: companyA.id,
+      email: "admin@riyadh.sa",
+      name: "م. فهد العتيبي (مدير شركة الرياض)",
+      passwordHash: defaultPasswordHash,
+      role: UserRole.COMPANY_ADMIN,
+    },
+  });
+
+  await prisma.user.create({
+    data: {
+      companyId: companyA.id,
+      email: "acc@riyadh.sa",
+      name: "محمد القحطاني (محاسب مالي)",
+      passwordHash: defaultPasswordHash,
+      role: UserRole.ACCOUNTANT,
+    },
+  });
+
+  await prisma.user.create({
+    data: {
+      companyId: companyA.id,
+      email: "agent1@riyadh.sa",
+      name: "أحمد المنصور (مبيعات 1)",
+      passwordHash: defaultPasswordHash,
+      role: UserRole.SALES_AGENT,
+    },
+  });
+
+  await prisma.user.create({
+    data: {
+      companyId: companyA.id,
+      email: "agent2@riyadh.sa",
+      name: "سعود الحربي (مبيعات 2)",
+      passwordHash: defaultPasswordHash,
+      role: UserRole.SALES_AGENT,
+    },
+  });
+
   // Units for Company A
   const unitA1 = await prisma.unit.create({
     data: {
@@ -383,6 +424,17 @@ async function main() {
       name: "فيصل الدوسري (مندوب مبيعات الأفق)",
       passwordHash: defaultPasswordHash,
       role: UserRole.SALES_AGENT,
+    },
+  });
+
+  // Additional compatibility account for Company B (supporting najd.sa isolation testing)
+  await prisma.user.create({
+    data: {
+      companyId: companyB.id,
+      email: "admin@najd.sa",
+      name: "سليمان النجد (مدير ديار نجد)",
+      passwordHash: defaultPasswordHash,
+      role: UserRole.COMPANY_ADMIN,
     },
   });
 

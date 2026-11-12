@@ -11,34 +11,75 @@ import {
   AlertCircle,
   UserCheck,
   Building,
-  KeyRound
+  KeyRound,
+  Zap,
+  Loader2
 } from "lucide-react";
 
-const testAccounts = [
-  { label: "مدير شركة الرياض", email: "admin@riyadh.sa", role: "مدير الشركة (Admin)", company: "شركة الرياض" },
-  { label: "محاسب مالي", email: "acc@riyadh.sa", role: "محاسب (Accountant)", company: "شركة الرياض" },
-  { label: "مندوب مبيعات 1", email: "agent1@riyadh.sa", role: "مبيعات (Agent 1)", company: "شركة الرياض" },
-  { label: "مندوب مبيعات 2", email: "agent2@riyadh.sa", role: "مبيعات (Agent 2)", company: "شركة الرياض" },
-  { label: "شركة ديار نجد (معزول)", email: "admin@najd.sa", role: "مدير (Tenant 2)", company: "ديار نجد" },
+interface TestAccount {
+  label: string;
+  name: string;
+  email: string;
+  role: "COMPANY_ADMIN" | "ACCOUNTANT" | "SALES_AGENT";
+  roleLabel: string;
+  company: string;
+  isTenant2?: boolean;
+}
+
+const testAccounts: TestAccount[] = [
+  {
+    label: "مدير الشركة",
+    name: "م. عبدالله التميمي",
+    email: "admin@greenryad.sa",
+    role: "COMPANY_ADMIN",
+    roleLabel: "مدير الشركة (Admin)",
+    company: "شركة الريادة الخضراء",
+  },
+  {
+    label: "محاسب مالي",
+    name: "أ. طارق العسيري",
+    email: "accountant@greenryad.sa",
+    role: "ACCOUNTANT",
+    roleLabel: "محاسب مالي (Accountant)",
+    company: "شركة الريادة الخضراء",
+  },
+  {
+    label: "مسؤول مبيعات 1",
+    name: "أحمد المنصور",
+    email: "agent1@greenryad.sa",
+    role: "SALES_AGENT",
+    roleLabel: "مبيعات (Agent 1)",
+    company: "شركة الريادة الخضراء",
+  },
+  {
+    label: "مسؤول مبيعات 2",
+    name: "سارة الدوسري",
+    email: "agent2@greenryad.sa",
+    role: "SALES_AGENT",
+    roleLabel: "مبيعات (Agent 2)",
+    company: "شركة الريادة الخضراء",
+  },
+  {
+    label: "شركة الأفق (معزول)",
+    name: "م. خالد القحطاني",
+    email: "admin@horizon.sa",
+    role: "COMPANY_ADMIN",
+    roleLabel: "مدير شركة الأفق (Tenant 2)",
+    company: "شركة الأفق للاستثمار",
+    isTenant2: true,
+  },
 ];
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("agent1@riyadh.sa");
-  const [password, setPassword] = useState("Password@123");
+  const [email, setEmail] = useState("admin@greenryad.sa");
+  const [password, setPassword] = useState("Password123!");
   const [loading, setLoading] = useState(false);
+  const [fastLoadingEmail, setFastLoadingEmail] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
-  const [activeAccountLabel, setActiveAccountLabel] = useState("مندوب مبيعات 1");
+  const [activeAccountLabel, setActiveAccountLabel] = useState("مدير الشركة");
 
-  const handleSelectAccount = (acc: typeof testAccounts[0]) => {
-    setEmail(acc.email);
-    setPassword("Password@123");
-    setErrorMsg("");
-    setActiveAccountLabel(acc.label);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const executeLogin = async (loginEmail: string, loginPass: string) => {
     setLoading(true);
     setErrorMsg("");
 
@@ -46,7 +87,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: loginEmail, password: loginPass }),
       });
 
       const data = await res.json();
@@ -54,15 +95,30 @@ export default function LoginPage() {
       if (!res.ok || !data.success) {
         setErrorMsg(data.error || "بيانات الاعتماد غير صحيحة");
         setLoading(false);
+        setFastLoadingEmail(null);
         return;
       }
 
       router.push("/units");
       router.refresh();
-    } catch (err) {
+    } catch {
       setErrorMsg("فشل الاتصال بالخادم. يرجى المحاولة مرة أخرى.");
       setLoading(false);
+      setFastLoadingEmail(null);
     }
+  };
+
+  const handleFastAccess = async (acc: TestAccount) => {
+    setEmail(acc.email);
+    setPassword("Password123!");
+    setActiveAccountLabel(acc.label);
+    setFastLoadingEmail(acc.email);
+    await executeLogin(acc.email, "Password123!");
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeLogin(email, password);
   };
 
   return (
@@ -206,47 +262,86 @@ export default function LoginPage() {
             {/* OR Divider */}
             <div className="relative my-6 flex items-center justify-center">
               <div className="w-full border-t border-gray-200"></div>
-              <span className="absolute px-3 bg-white text-[11px] font-bold text-gray-400 tracking-wider">
-                أو اختر حساباً تجريبياً (QUICK LOGIN)
+              <span className="absolute px-3 bg-white text-[11px] font-bold text-gray-500 tracking-wider flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                <span>دخول سريع فوري (FAST ACCESS)</span>
               </span>
             </div>
 
-            {/* Quick Test Accounts Pills Grid (Styled like the social buttons in the mockup) */}
-            <div className="flex flex-col gap-2">
+            {/* Quick Test Accounts Pills Grid */}
+            <div className="flex flex-col gap-2.5">
+              {/* Company A: شركة الريادة الخضراء */}
               <div className="grid grid-cols-2 gap-2">
                 {testAccounts.slice(0, 4).map((acc) => {
                   const isSelected = activeAccountLabel === acc.label;
+                  const isThisFastLoading = fastLoadingEmail === acc.email;
                   return (
                     <button
                       key={acc.email}
                       type="button"
-                      onClick={() => handleSelectAccount(acc)}
-                      className={`h-11 px-3 rounded-full text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border ${
+                      disabled={loading}
+                      onClick={() => handleFastAccess(acc)}
+                      title={`دخول فوري كـ ${acc.name} (${acc.email})`}
+                      className={`h-12 px-3 rounded-2xl text-xs font-semibold flex items-center justify-between gap-1.5 transition-all border cursor-pointer active:scale-95 ${
                         isSelected
-                          ? "bg-secondary-container/40 border-secondary text-primary font-bold shadow-sm"
-                          : "bg-gray-50 hover:bg-gray-100 border-gray-200 text-gray-700"
-                      }`}
+                          ? "bg-emerald-50 border-[#064e3b] text-[#064e3b] font-bold shadow-sm ring-1 ring-[#064e3b]/20"
+                          : "bg-gray-50/90 hover:bg-emerald-50/60 hover:border-emerald-300 border-gray-200 text-gray-700"
+                      } disabled:opacity-60`}
                     >
-                      <UserCheck className="w-3.5 h-3.5 text-secondary shrink-0" />
-                      <span className="truncate">{acc.label}</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {acc.role === "COMPANY_ADMIN" ? (
+                          <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                        ) : acc.role === "ACCOUNTANT" ? (
+                          <KeyRound className="w-4 h-4 text-emerald-700 shrink-0" />
+                        ) : (
+                          <UserCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                        )}
+                        <div className="flex flex-col text-right min-w-0 leading-tight">
+                          <span className="truncate text-[11px] font-bold">{acc.label}</span>
+                          <span className="truncate text-[10px] text-gray-500 font-normal">{acc.name}</span>
+                        </div>
+                      </div>
+
+                      {isThisFastLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 text-[#064e3b] animate-spin shrink-0" />
+                      ) : (
+                        <span className="text-[10px] text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">
+                          ⚡
+                        </span>
+                      )}
                     </button>
                   );
                 })}
               </div>
 
-              {/* Company 2 Quick Switcher (Tenant 2 isolation test) */}
+              {/* Company B Quick Switcher (Tenant 2 isolation test) */}
               {testAccounts[4] && (
                 <button
                   type="button"
-                  onClick={() => handleSelectAccount(testAccounts[4]!)}
-                  className={`w-full h-10 px-4 rounded-full text-xs font-semibold flex items-center justify-center gap-2 transition-all border ${
+                  disabled={loading}
+                  onClick={() => handleFastAccess(testAccounts[4]!)}
+                  title={`دخول فوري كـ ${testAccounts[4]!.name} (${testAccounts[4]!.email})`}
+                  className={`w-full h-11 px-3.5 rounded-2xl text-xs font-semibold flex items-center justify-between gap-2 transition-all border cursor-pointer active:scale-95 ${
                     activeAccountLabel === testAccounts[4]!.label
-                      ? "bg-secondary-container/40 border-secondary text-primary font-bold"
-                      : "bg-gray-50 hover:bg-gray-100 border-gray-200 text-gray-600"
-                  }`}
+                      ? "bg-amber-50 border-amber-600 text-amber-900 font-bold shadow-sm ring-1 ring-amber-600/30"
+                      : "bg-gray-50/90 hover:bg-amber-50/50 hover:border-amber-300 border-gray-200 text-gray-700"
+                  } disabled:opacity-60`}
                 >
-                  <Building className="w-3.5 h-3.5 text-secondary" />
-                  <span>تبديل إلى: {testAccounts[4]!.label}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Building className="w-4 h-4 text-amber-700 shrink-0" />
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-bold truncate">{testAccounts[4]!.label}:</span>
+                      <span className="text-gray-500 truncate text-[11px]">{testAccounts[4]!.name} ({testAccounts[4]!.email})</span>
+                    </div>
+                  </div>
+
+                  {fastLoadingEmail === testAccounts[4]!.email ? (
+                    <Loader2 className="w-3.5 h-3.5 text-amber-700 animate-spin shrink-0" />
+                  ) : (
+                    <span className="text-[10px] text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md font-bold shrink-0 flex items-center gap-1">
+                      <span>عزل تام ⚡</span>
+                    </span>
+                  )}
                 </button>
               )}
             </div>

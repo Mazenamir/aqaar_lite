@@ -27,18 +27,17 @@ export function AppShell({ children, activeTab, onTabChange }: AppShellProps) {
       <div className="absolute -bottom-28 -right-28 w-96 h-96 bg-[#fed7aa]/40 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute top-1/2 -right-32 w-80 h-80 bg-[#bbf7d0]/25 rounded-full blur-3xl pointer-events-none"></div>
 
-      {/* Floating Rounded Tablet/Dashboard Container (Docked dark sidebar on the left, white canvas on the right) */}
+      {/* Floating Rounded Tablet/Dashboard Container (Docked dark sidebar on the right, white canvas on the left) */}
       <div
-        dir="ltr"
+        dir="rtl"
         className="w-full max-w-[1640px] min-h-[94vh] bg-[#fbfcfd] rounded-[36px] sm:rounded-[44px] lg:rounded-[48px] shadow-[0_25px_80px_-20px_rgba(0,33,23,0.12)] border border-white/80 flex flex-col sm:flex-row relative z-10 overflow-hidden"
       >
-        {/* Sleek Docked Capsule Dark Sidebar on the Left */}
+        {/* Sleek Docked Capsule Dark Sidebar on the Right */}
         <Sidebar activeTab={activeTab} onTabChange={onTabChange} />
 
-        {/* Dashboard Main Workspace on the Right with RTL content */}
+        {/* Dashboard Main Workspace on the Left with RTL content */}
         <main
-          dir="rtl"
-          className="flex-1 flex flex-col min-w-0 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#fbfcfd]"
+          className="flex-1 flex flex-col min-w-0 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#fbfcfd] scroll-smooth"
         >
           {children}
         </main>

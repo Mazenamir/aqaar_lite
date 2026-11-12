@@ -108,34 +108,41 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
           if (isActive) {
             return (
-              <div
+              <button
                 key={item.href}
-                className="relative w-full flex items-center justify-center sm:justify-end my-1"
+                type="button"
+                onClick={() => {
+                  if (onTabChange) {
+                    onTabChange(item.id, item.href);
+                  }
+                }}
+                title={item.name}
+                className="relative w-full flex items-center justify-center my-1 cursor-pointer focus:outline-none group"
               >
-                {/* Active White Tab that merges into main content on the right */}
-                <div className="relative w-full h-14 flex items-center justify-center bg-[#fbfcfd] sm:rounded-l-[28px] sm:rounded-r-none z-20">
+                {/* Active White Tab that merges into main content on the left */}
+                <div className="relative w-full h-14 flex items-center justify-center bg-[#fbfcfd] sm:rounded-r-[28px] sm:rounded-l-none z-20 shadow-xs transition-all duration-300">
                   {/* Icon centered inside the white scooped tab */}
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-[#002117] hover:scale-105 transition-transform">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-[#002117] group-hover:scale-110 transition-transform duration-200">
                     <Icon className="w-6 h-6 text-[#002117]" />
                   </div>
 
                   {/* Top concave fillet (scoop curve) */}
                   <svg
-                    className="hidden sm:block absolute -top-6 right-0 w-6 h-6 pointer-events-none fill-[#fbfcfd]"
+                    className="hidden sm:block absolute -top-6 left-0 w-6 h-6 pointer-events-none fill-[#fbfcfd]"
                     viewBox="0 0 24 24"
                   >
-                    <path d="M24,0 C24,13.255 13.255,24 0,24 H24 V0 Z" />
+                    <path d="M0,0 C0,13.255 10.745,24 24,24 H0 V0 Z" />
                   </svg>
 
                   {/* Bottom concave fillet (scoop curve) */}
                   <svg
-                    className="hidden sm:block absolute -bottom-6 right-0 w-6 h-6 pointer-events-none fill-[#fbfcfd]"
+                    className="hidden sm:block absolute -bottom-6 left-0 w-6 h-6 pointer-events-none fill-[#fbfcfd]"
                     viewBox="0 0 24 24"
                   >
-                    <path d="M24,24 C24,10.745 13.255,0 0,0 H24 V24 Z" />
+                    <path d="M0,24 C0,10.745 10.745,0 24,0 H0 V24 Z" />
                   </svg>
                 </div>
-              </div>
+              </button>
             );
           }
 
@@ -150,12 +157,12 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                 }
               }}
               title={item.name}
-              className="relative group w-12 h-12 rounded-2xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+              className="relative group w-12 h-12 rounded-2xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 active:scale-95 transition-all duration-200 cursor-pointer"
             >
-              <Icon className="w-5 h-5" />
+              <Icon className="w-5 h-5 transition-transform duration-200 group-hover:scale-110" />
 
               {/* Tooltip on hover */}
-              <span className="hidden sm:group-hover:flex absolute left-20 px-3 py-1.5 rounded-xl bg-[#003527] text-white text-xs font-semibold whitespace-nowrap shadow-xl border border-emerald-700/40 z-50 pointer-events-none animate-in fade-in zoom-in-95 font-sans">
+              <span className="hidden sm:group-hover:flex absolute right-20 px-3 py-1.5 rounded-xl bg-[#003527] text-white text-xs font-semibold whitespace-nowrap shadow-xl border border-emerald-700/40 z-50 pointer-events-none animate-in fade-in zoom-in-95 font-sans">
                 {item.name}
               </span>
             </Link>
@@ -174,7 +181,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-[#002117] rounded-full"></span>
 
           {/* User profile tooltip */}
-          <div className="hidden sm:group-hover:flex flex-col absolute left-14 bottom-0 p-3 rounded-2xl bg-[#003527] text-white text-xs whitespace-nowrap shadow-2xl border border-emerald-700/40 z-50 pointer-events-none font-sans">
+          <div className="hidden sm:group-hover:flex flex-col absolute right-14 bottom-0 p-3 rounded-2xl bg-[#003527] text-white text-xs whitespace-nowrap shadow-2xl border border-emerald-700/40 z-50 pointer-events-none font-sans">
             <span className="font-bold">{user?.name || "المستخدم"}</span>
             <span className="text-[10px] text-emerald-300 font-medium">{getRoleLabel(user?.role)}</span>
             <span className="text-[10px] text-emerald-400/80 font-mono mt-0.5">{user?.companyName}</span>
