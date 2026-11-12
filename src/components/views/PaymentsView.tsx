@@ -213,7 +213,7 @@ interface RawContractItem {
       setIsModalOpen(false);
       setFeedbackMsg({
         type: "success",
-        text: `تم إصدار سند القبض رقم ${json.data.receiptNumber} بقيمة ${val.toLocaleString("en-US")} ر.س وتوزيع الأقساط آلياً (FIFO)`,
+        text: `تم إصدار سند القبض رقم ${json.data.receiptNumber} بقيمة ${val.toLocaleString("en-US")} ر.س وتسوية الأقساط المستحقة بنجاح`,
       });
       fetchPayments();
       fetchContractsForPayment();
@@ -278,7 +278,7 @@ interface RawContractItem {
             <span className="text-2xl">💳</span>
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 font-medium mt-0.5">
-            قيد سندات القبض المالية، التوزيع الآلي بنظام الأسبقية (FIFO)، ومنع التكرار المحاسبي.
+            قيد سندات القبض المالية ومتابعة تسوية الأقساط المستحقة.
           </p>
         </div>
 
@@ -510,7 +510,7 @@ interface RawContractItem {
                   <th className="px-4">اسم العميل</th>
                   <th className="px-4">المبلغ المحصل</th>
                   <th className="px-4">طريقة السداد</th>
-                  <th className="px-4">توزيع الأقساط (FIFO)</th>
+                  <th className="px-4">تسوية الأقساط</th>
                   <th className="px-4">تاريخ السند</th>
                   <th className="pl-6 pr-4">المسؤول والملاحظات</th>
                 </tr>
@@ -722,15 +722,14 @@ interface RawContractItem {
             />
           </div>
 
-          {/* FIFO Allocation Note */}
-          <div className="p-3.5 rounded-2xl bg-[#f7fee7] border border-[#d9f99d] flex flex-col gap-1 text-xs">
-            <span className="font-extrabold text-[#365314] flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4 text-[#65a30d]" />
-              <span>قاعدة التوزيع المالي الذكي (FIFO Allocation):</span>
+          {/* Allocation Note */}
+          <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200 flex flex-col gap-1 text-xs">
+            <span className="font-bold text-gray-700 flex items-center gap-1.5">
+              <TrendingUp className="w-4 h-4 text-emerald-700" />
+              <span>آلية تسوية الأقساط:</span>
             </span>
-            <p className="text-[#365314]/80 text-[11px] leading-relaxed">
-              سيقوم النظام فورياً بتوزيع هذا المبلغ لسداد الأقساط غير المدفوعة ذات تاريخ الاستحقاق الأقدم أولاً حتى
-              استنفاد المبلغ بالكامل، وإذا كان المبلغ أكبر من قسط واحد سيتم سداد الأقساط التالية تباعاً.
+            <p className="text-gray-600 text-[11px] leading-relaxed">
+              يتم توجيه مبلغ السداد لتسوية الأقساط المستحقة حسب تاريخ استحقاقها الزمني تباعاً حتى اكتمال قيمة السند.
             </p>
           </div>
 
