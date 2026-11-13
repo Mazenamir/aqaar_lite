@@ -51,10 +51,12 @@
    - [مجالات الاستخدام والتسريع](#مجالات-الاستخدام-والتسريع)
    - [ما تم تصميمه وتدقيقه بشرياً وهندسياً](#ما-تم-تصميمه-وتدقيقه-بشرياً-وهندسياً)
    - [الجاهزية التامة للمقابلة التقنية والتعديل الحي المباشر](#الجاهزية-التامة-للمقابلة-التقنية-والتعديل-الحي-المباشر)
-7. [معمارية النظام وجودة الكود (System Architecture & Code Quality)](#7-معمارية-النظام-وجودة-الكود)
-   - [فصل الطبقات الصارم (Separation of Concerns)](#فصل-الطبقات-الصارم-separation-of-concerns)
-   - [سلامة المعاملات الذرية (ACID Transactions)](#سلامة-المعاملات-الذرية-acid-transactions)
-   - [قيود قاعدة البيانات والمفاتيح المركبة](#قيود-قاعدة-البيانات-والمفاتيح-المركبة)
+7. [معمارية النظام وجودة الكود ومخطط الكيانات (System Architecture, Code Quality & ERD)](#7-معمارية-النظام-وجودة-الكود-ومخطط-الكيانات)
+   - [أ. المخطط المعماري الشامل للنظام (System Architecture Diagram)](#أ-المخطط-المعماري-الشامل-للنظام-system-architecture-diagram)
+   - [ب. مخطط علاقات الكيانات (Entity-Relationship Diagram - ERD)](#ب-مخطط-علاقات-الكيانات-entity-relationship-diagram---erd)
+   - [ج. فصل الطبقات الصارم (Separation of Concerns)](#ج-فصل-الطبقات-الصارم-separation-of-concerns)
+   - [د. سلامة المعاملات الذرية (ACID Transactions)](#د-سلامة-المعاملات-الذرية-acid-transactions)
+   - [هـ. قيود قاعدة البيانات والمفاتيح المركبة](#هـ-قيود-قاعدة-البيانات-والمفاتيح-المركبة)
 8. [حزم الاختبارات الآلية والتكامل المستمر (Automated Test Suites & CI/CD)](#8-حزم-الاختبارات-الآلية-والتكامل-المستمر)
    - [تفصيل نتائج 137 اختباراً عبر 14 حزمة اختبار](#تفصيل-نتائج-137-اختباراً-عبر-14-حزمة-اختبار)
    - [خط أنابيب فحص الجودة الآلي في GitHub Actions](#خط-أنابيب-فحص-الجودة-الآلي-في-github-actions)
@@ -391,25 +393,262 @@ npm run dev
 
 <div dir="rtl" align="right">
 
-## 7. معمارية النظام وجودة الكود
+## 7. معمارية النظام وجودة الكود ومخطط الكيانات
 
-### فصل الطبقات الصارم (Separation of Concerns)
+### أ. المخطط المعماري الشامل للنظام (System Architecture Diagram)
+
+يتبع النظام معمارية طبقية متعددة المستويات تضمن الفصل الصارم بين العرض، التحقق الأمني، نطاق الأعمال، وقاعدة البيانات:
+
+</div>
+
+```mermaid
+flowchart TD
+    subgraph ClientLayer ["1. طبقة واجهة المستخدم (Presentation Layer - Next.js 15)"]
+        UI_Login["شاشة الدخول الموحدة (/login) مع أزرار التبديل السريع"]
+        UI_Units["إدارة الوحدات والأسعار (/units) مع فلترة الخادم"]
+        UI_Clients["إدارة العملاء وخصوصية المناديب (/clients)"]
+        UI_Reservations["الحجوزات التزامنية المؤقتة 72 ساعة (/reservations)"]
+        UI_Contracts["صياغة واعتماد مسودات العقود والأقساط (/contracts)"]
+        UI_Payments["تحصيل سندات القبض وتوزيع FIFO (/payments)"]
+        UI_Audit["سجل التدقيق والرقابة غير القابل للتعديل (/audit)"]
+    end
+
+    subgraph SecurityLayer ["2. بوابة الأمان وتوثيق الهوية (API & Security Gateway)"]
+        MW_Cookie["فحص كوكي الجلسة الآمن (HttpOnly & Secure & SameSite: Lax)"]
+        MW_Session["التحقق من تجزئة الجلسة SHA-256 في قاعدة البيانات"]
+        MW_Tenant["استخراج سياق الشركة companyId حصرياً من الجلسة"]
+        MW_RBAC["إنفاذ الصلاحيات: Admin | Sales Agent | Accountant"]
+        MW_Zod["تطهير المدخلات وفحص المخططات الصارمة عبر Zod"]
+    end
+
+    subgraph ServicesLayer ["3. طبقة الخدمات ونطاق العمل (Domain Services Layer)"]
+        SVC_Auth["AuthService: تشفير Argon2id + إبطال الجلسات الفوري"]
+        SVC_Unit["UnitService: حظر تعديل أسعار المحجوز والمباع"]
+        SVC_Reservation["ReservationService: التحديث الشرطي الذري + انتهاء 72 ساعة"]
+        SVC_Contract["ContractService: سقف خصم 5% + ترحيل الوحدة إلى SOLD"]
+        SVC_Installment["InstallmentService: تقريب نهاية الشهر (31 يناير) + كسور الهللات"]
+        SVC_Payment["PaymentService: قفل تشاؤمي FOR UPDATE + منع التكرار Idempotency"]
+        SVC_Alloc["PaymentAllocationService: التوزيع المتسلسل التلقائي FIFO"]
+        SVC_Audit["AuditService: سجل إلحاقي دائم Append-Only للعمليات الحساسة"]
+    end
+
+    subgraph DBLayer ["4. طبقة البيانات والتكامل الرقابي (PostgreSQL 16 via Prisma ORM)"]
+        DB_Tenants["عزل المستأجرين عبر المفاتيح الأجنبية المركبة (id, companyId)"]
+        DB_Checks["قيود الفحص CHECK: الأسعار > 0، الخصم <= 5%، الدفعة الأولى < السعر"]
+        DB_Triggers["مشغلات قاعدة البيانات Triggers: سقف تخصيص الدفعات والأقساط"]
+        DB_Locks["أقفال الصفوف الحصرية Row-Level Locks لمنع التنافسية والتسابق"]
+    end
+
+    subgraph WorkersLayer ["5. عمال الخلفية والجدولة (Background Sweepers & Workers)"]
+        Worker_Lazy["المسح الكسول التلقائي عند الطلب (Lazy In-Flight Sweeper)"]
+        Worker_Daemon["عامل الخلفية الدائم لتحرير الحجوزات المنتهية (72h Expiration Daemon)"]
+        Worker_Cron["نقطة نهاية الجدولة السحابية (/api/cron/expire-reservations)"]
+    end
+
+    ClientLayer --> SecurityLayer
+    SecurityLayer --> ServicesLayer
+    ServicesLayer --> DBLayer
+    WorkersLayer --> DBLayer
+```
+
+---
+
+<div dir="rtl" align="right">
+
+### ب. مخطط علاقات الكيانات (Entity-Relationship Diagram - ERD)
+
+يوضح المخطط أدناه بنية الكيانات الـ 11 في قاعدة البيانات، مع إبراز القيود الفريدة المركبة (**Composite Unique Keys**) والمفاتيح الأجنبية المركبة المربوطة بـ `companyId` لضمان استحالة الربط العابر بين الشركات:
+
+</div>
+
+```mermaid
+erDiagram
+    COMPANIES ||--o{ USERS : "employs"
+    COMPANIES ||--o{ UNITS : "owns"
+    COMPANIES ||--o{ CLIENTS : "has"
+    COMPANIES ||--o{ RESERVATIONS : "holds"
+    COMPANIES ||--o{ CONTRACTS : "executes"
+    COMPANIES ||--o{ PAYMENTS : "collects"
+    COMPANIES ||--o{ AUDIT_LOGS : "audits"
+
+    USERS ||--o{ SESSIONS : "authenticates"
+    USERS ||--o{ CLIENTS : "manages (createdById)"
+    USERS ||--o{ RESERVATIONS : "books (createdById)"
+    USERS ||--o{ CONTRACTS : "drafts (createdById)"
+    USERS ||--o{ CONTRACTS : "approves (approvedById)"
+    USERS ||--o{ PAYMENTS : "registers (createdById)"
+    USERS ||--o{ AUDIT_LOGS : "triggers (userId)"
+
+    UNITS ||--o{ RESERVATIONS : "reserved_in"
+    UNITS ||--o{ CONTRACTS : "sold_in"
+
+    CLIENTS ||--o{ RESERVATIONS : "reserves_for"
+    CLIENTS ||--o{ CONTRACTS : "purchases"
+
+    RESERVATIONS ||--o| CONTRACTS : "converts_to"
+
+    CONTRACTS ||--|{ INSTALLMENTS : "schedules"
+    CONTRACTS ||--o{ PAYMENTS : "settles"
+
+    PAYMENTS ||--|{ PAYMENT_ALLOCATIONS : "allocates"
+    INSTALLMENTS ||--o{ PAYMENT_ALLOCATIONS : "settled_via"
+
+    COMPANIES {
+        string id PK
+        string name "Company Name"
+        string crNumber UK "Commercial Registration"
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    USERS {
+        string id PK
+        string companyId FK "Composite Key (id, companyId)"
+        string email UK "Login identifier"
+        string passwordHash "Argon2id Hash"
+        string name "Full Name"
+        string role "COMPANY_ADMIN | SALES_AGENT | ACCOUNTANT"
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    SESSIONS {
+        string id PK
+        string sessionTokenHash UK "SHA-256 Token Hash"
+        string userId FK
+        datetime expiresAt "Default 7 days"
+        datetime revokedAt "Server-side invalidation"
+        string ipAddress
+        string userAgent
+        datetime createdAt
+    }
+
+    UNITS {
+        string id PK
+        string companyId FK "Composite Key (id, companyId)"
+        string project "Real estate project text"
+        string code "Composite UK (companyId, code)"
+        string type "Apartment | Villa | Duplex"
+        string floor
+        int area "Square meters"
+        int rooms "Room count"
+        decimal price "Decimal(14,2) > 0"
+        string status "AVAILABLE | RESERVED | SOLD"
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    CLIENTS {
+        string id PK
+        string companyId FK "Composite Key (id, companyId)"
+        string createdById FK "Scoped to Sales Representative"
+        string name "Client Name"
+        string phone "Contact Number"
+        string notes "Free text requirements"
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    RESERVATIONS {
+        string id PK
+        string companyId FK "Composite Key (id, companyId)"
+        string unitId FK "Composite (unitId, companyId)"
+        string clientId FK "Composite (clientId, companyId)"
+        string createdById FK "Composite (createdById, companyId)"
+        datetime expiresAt "Now + 72 Hours"
+        string status "ACTIVE | EXPIRED | CONVERTED"
+        datetime createdAt
+    }
+
+    CONTRACTS {
+        string id PK
+        string companyId FK "Composite Key (id, companyId)"
+        string contractNumber "Composite UK (companyId, contractNumber)"
+        string unitId FK "Composite (unitId, companyId)"
+        string clientId FK "Composite (clientId, companyId)"
+        string reservationId FK "Nullable"
+        string createdById FK "Sales Agent"
+        string approvedById FK "Accountant"
+        datetime approvedAt "Approval timestamp"
+        decimal unitPrice "Decimal(14,2) Original price"
+        decimal discountPercent "Decimal(5,2) 0 to 5% Max"
+        decimal finalPrice "Decimal(14,2) unitPrice - discount"
+        decimal downPayment "Decimal(14,2) < finalPrice"
+        int installmentCount "Number of monthly installments"
+        string status "DRAFT | APPROVED | COMPLETED"
+        datetime startDate "Contract start date"
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    INSTALLMENTS {
+        string id PK
+        string contractId FK
+        int installmentNumber "Composite UK (contractId, installmentNumber)"
+        datetime dueDate "Clamped to month end"
+        decimal amount "Decimal(14,2) > 0"
+        decimal paidAmount "Decimal(14,2) <= amount"
+        string status "PENDING | PARTIAL | PAID"
+        datetime paidAt "Nullable"
+    }
+
+    PAYMENTS {
+        string id PK
+        string companyId FK "Composite Key (id, companyId)"
+        string contractId FK "Composite (contractId, companyId)"
+        string createdById FK "Accountant"
+        string receiptNumber "Composite UK (companyId, receiptNumber)"
+        decimal amount "Decimal(14,2) > 0"
+        string method "SADAD | MADA | BANK_TRANSFER | CASH | CHEQUE"
+        string idempotencyKey UK "Unique request token"
+        string notes "Nullable"
+        datetime createdAt
+    }
+
+    PAYMENT_ALLOCATIONS {
+        string id PK
+        string paymentId FK
+        string installmentId FK
+        decimal amount "Decimal(14,2) > 0 (FIFO)"
+    }
+
+    AUDIT_LOGS {
+        string id PK
+        string companyId FK
+        string userId FK "Nullable"
+        string action "LOGIN | UNIT_PRICE_CHANGED | CONTRACT_APPROVED | PAYMENT_RECORDED"
+        string entityType "Unit | Contract | Payment | User"
+        string entityId "Nullable"
+        string details "Sanitized JSON payload"
+        string ipAddress "Nullable"
+        datetime createdAt
+    }
+```
+
+---
+
+<div dir="rtl" align="right">
+
+### ج. فصل الطبقات الصارم (Separation of Concerns)
 تم فصل منطق العمل تماماً عن طبقة العرض والـ API:
 - **طبقة النطاق والخدمات (`src/services/`)**: تحتوي على كافة قواعد الأعمال المستقلة (حساب الأقساط، توزيع الدفعات FIFO، الحجوزات التزامنية). لا تحتوي على أي كود React أو تبعيات HTTP.
 - **طبقة المعالجات والتحقق (`src/app/api/`)**: تقتصر على فك الجلسة، والتحقق من الصلاحيات والمدخلات عبر Zod، وتمرير البيانات للخدمات.
 - **طبقة الواجهة (`src/app/`, `src/components/`)**: مكونات نقية ومبنية بـ Tailwind مع دعم RTL والتعامل مع حالات التحميل والخطأ.
 - **TypeScript بوضع Strict كامل**: انعدام تام لأي استخدام لنوع `any` عبر كامل المشروع.
 
-### سلامة المعاملات الذرية (ACID Transactions)
+### د. سلامة المعاملات الذرية (ACID Transactions)
 - اعتماد العقد، تحويل الوحدة لمباعة، وتوثيق سجل التدقيق يتم في **معاملة واحدة ذرية** (`prisma.$transaction`).
 - تسجيل سند القبض، إنشاء سجلات التخصيص، تحديث مبالغ الأقساط، وتحديث رصيد العقد يتم في **معاملة واحدة ذرية** لا تترك أي بيانات في حالة نصف منفذة.
 
-### قيود قاعدة البيانات والمفاتيح المركبة
+### هـ. قيود قاعدة البيانات والمفاتيح المركبة
 تم إدراج قيود السلامة داخل ترحيلات PostgreSQL نفسها (`migration.sql`):
 - `check_unit_price_positive`: السعر أكبر من صفر.
 - `check_contract_discount_range`: الخصم بين 0% و 5%.
 - `check_contract_down_payment_valid`: الدفعة الأولى أقل من السعر النهائي.
-- مشغلات قاعدة البيانات (`Triggers`): منع تجاوز مبالغ تخصيص الدفعة لأصل السند أو القسط.
+- `check_installment_amount_positive`: مبلغ القسط أكبر من صفر.
+- `check_installment_paid_amount_valid`: المبلغ المسدد بين صفر وقيمة القسط.
+- `check_payment_amount_positive`: مبلغ الدفعة أكبر من صفر.
+- مشغلات قاعدة البيانات (`Triggers`): `trigger_check_payment_allocation_ceiling` و `trigger_check_installment_allocation_ceiling` لمنع تجاوز مبالغ تخصيص الدفعة لأصل السند أو القسط.
 
 </div>
 
