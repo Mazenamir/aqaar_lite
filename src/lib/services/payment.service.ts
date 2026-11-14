@@ -41,11 +41,32 @@ export interface PaymentDto {
   }[];
 }
 
+export const PAYMENT_WITH_RELATIONS_INCLUDE = {
+  contract: {
+    include: {
+      unit: true,
+      client: true,
+    },
+  },
+  createdBy: {
+    select: { id: true, name: true },
+  },
+  allocations: {
+    include: {
+      installment: true,
+    },
+  },
+} satisfies Prisma.PaymentInclude;
+
+export type PaymentWithRelations = Prisma.PaymentGetPayload<{
+  include: typeof PAYMENT_WITH_RELATIONS_INCLUDE;
+}>;
+
 export class PaymentService {
   /**
    * Helper to format payment DTO with exact Decimal strings and halalas representations.
    */
-  private static formatPaymentDto(p: any): PaymentDto {
+  private static formatPaymentDto(p: PaymentWithRelations): PaymentDto {
     const amountHalalas = sarToHalalas(p.amount.toString());
     return {
       id: p.id,
@@ -62,7 +83,7 @@ export class PaymentService {
       createdByName: p.createdBy?.name || "المحاسب المالي",
       createdById: p.createdById,
       createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : String(p.createdAt),
-      allocations: (p.allocations || []).map((a: any) => {
+      allocations: (p.allocations || []).map((a) => {
         const allocHalalas = sarToHalalas(a.amount.toString());
         return {
           id: a.id,
@@ -99,22 +120,7 @@ export class PaymentService {
     const payments = await prisma.payment.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      include: {
-        contract: {
-          include: {
-            unit: true,
-            client: true,
-          },
-        },
-        createdBy: {
-          select: { id: true, name: true, email: true },
-        },
-        allocations: {
-          include: {
-            installment: true,
-          },
-        },
-      },
+      include: PAYMENT_WITH_RELATIONS_INCLUDE,
     });
 
     return payments.map((p) => this.formatPaymentDto(p));
@@ -134,22 +140,7 @@ export class PaymentService {
         id: paymentId,
         companyId,
       },
-      include: {
-        contract: {
-          include: {
-            unit: true,
-            client: true,
-          },
-        },
-        createdBy: {
-          select: { id: true, name: true, email: true },
-        },
-        allocations: {
-          include: {
-            installment: true,
-          },
-        },
-      },
+      include: PAYMENT_WITH_RELATIONS_INCLUDE,
     });
 
     if (!payment) {
@@ -205,15 +196,7 @@ export class PaymentService {
         idempotencyKey: trimmedIdempotencyKey,
         companyId: input.companyId,
       },
-      include: {
-        contract: {
-          include: { unit: true, client: true },
-        },
-        createdBy: { select: { id: true, name: true } },
-        allocations: {
-          include: { installment: true },
-        },
-      },
+      include: PAYMENT_WITH_RELATIONS_INCLUDE,
     });
 
     if (existingPayment) {
@@ -376,15 +359,7 @@ export class PaymentService {
         // Fetch created payment with relations for return DTO
         const completePayment = await tx.payment.findUniqueOrThrow({
           where: { id: payment.id },
-          include: {
-            contract: {
-              include: { unit: true, client: true },
-            },
-            createdBy: { select: { id: true, name: true } },
-            allocations: {
-              include: { installment: true },
-            },
-          },
+          include: PAYMENT_WITH_RELATIONS_INCLUDE,
         });
 
         return {
@@ -403,15 +378,7 @@ export class PaymentService {
             idempotencyKey: trimmedIdempotencyKey,
             companyId: input.companyId,
           },
-          include: {
-            contract: {
-              include: { unit: true, client: true },
-            },
-            createdBy: { select: { id: true, name: true } },
-            allocations: {
-              include: { installment: true },
-            },
-          },
+          include: PAYMENT_WITH_RELATIONS_INCLUDE,
         });
 
         if (raceExisting) {

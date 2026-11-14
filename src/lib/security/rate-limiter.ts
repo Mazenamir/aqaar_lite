@@ -3,6 +3,16 @@
  *
  * Tracks failed login attempts per key (e.g. IP address or IP + email).
  * Blocks further attempts for a cooldown window once the threshold is reached.
+ *
+ * Production Scalability Note (Horizontal Scaling):
+ * - Current Implementation: High-performance in-memory Map with automatic periodic cleanup,
+ *   ideal for single-container / evaluation environments with zero external dependencies.
+ * - Multi-Instance / Cluster Deployment (Production Consideration):
+ *   When running across multiple horizontal instances (e.g. Kubernetes, multiple Next.js pods),
+ *   each instance maintains an isolated memory space.
+ *   Recommended production upgrade: Replace the local Map adapter with a centralized distributed
+ *   store such as Redis / Upstash (using atomic INCR + EXPIRE or sliding window via ZADD/ZREMRANGEBYSCORE)
+ *   or an API Gateway / Edge WAF rate limiter (e.g., Cloudflare / AWS WAF / Vercel Firewall).
  */
 
 interface RateLimitRecord {

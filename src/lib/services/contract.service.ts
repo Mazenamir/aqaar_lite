@@ -22,14 +22,28 @@ export interface ApproveContractInput {
   userRole?: UserRole;
 }
 
+export const CONTRACT_WITH_RELATIONS_INCLUDE = {
+  unit: true,
+  client: true,
+  reservation: true,
+  createdBy: { select: { id: true, name: true, email: true } },
+  approvedBy: { select: { id: true, name: true, email: true } },
+  installments: { orderBy: { installmentNumber: "asc" } },
+  payments: { orderBy: { createdAt: "desc" } },
+} satisfies Prisma.ContractInclude;
+
+export type ContractWithRelations = Prisma.ContractGetPayload<{
+  include: typeof CONTRACT_WITH_RELATIONS_INCLUDE;
+}>;
+
 export class ContractService {
   /**
    * Helper to format contract and installment DTO with strict Decimal string outputs
    * and halalas representations for full compatibility and precision.
    */
-  private static formatContractDto(c: any, now: Date = new Date()) {
+  private static formatContractDto(c: ContractWithRelations, now: Date = new Date()) {
     const totalPaid = c.payments ? c.payments.reduce(
-      (sum: Prisma.Decimal, p: any) => sum.plus(p.amount),
+      (sum: Prisma.Decimal, p) => sum.plus(p.amount),
       new Prisma.Decimal("0.00")
     ) : new Prisma.Decimal("0.00");
 
@@ -99,7 +113,7 @@ export class ContractService {
       remainingBalanceSar: formatSar(remainingBalance),
       remainingBalanceHalalas: remainingBalanceHalalas.toString(),
       installmentCount: c.installmentCount,
-      installments: (c.installments || []).map((inst: any) => {
+      installments: (c.installments || []).map((inst) => {
         const isOverdue = inst.status !== "PAID" && new Date(inst.dueDate) < now;
         const instAmountHalalas = sarToHalalas(inst.amount.toString());
         const instPaidHalalas = sarToHalalas(inst.paidAmount.toString());
@@ -118,7 +132,7 @@ export class ContractService {
           paidAt: inst.paidAt?.toISOString() || null,
         };
       }),
-      payments: (c.payments || []).map((p: any) => ({
+      payments: (c.payments || []).map((p) => ({
         id: p.id,
         receiptNumber: p.receiptNumber,
         amount: p.amount.toFixed(2),
@@ -146,15 +160,7 @@ export class ContractService {
     const contracts = await prisma.contract.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      include: {
-        unit: true,
-        client: true,
-        reservation: true,
-        createdBy: { select: { id: true, name: true, email: true } },
-        approvedBy: { select: { id: true, name: true, email: true } },
-        installments: { orderBy: { installmentNumber: "asc" } },
-        payments: { orderBy: { createdAt: "desc" } },
-      },
+      include: CONTRACT_WITH_RELATIONS_INCLUDE,
     });
 
     const now = new Date();
@@ -175,15 +181,7 @@ export class ContractService {
         id: contractId,
         companyId,
       },
-      include: {
-        unit: true,
-        client: true,
-        reservation: true,
-        createdBy: { select: { id: true, name: true, email: true } },
-        approvedBy: { select: { id: true, name: true, email: true } },
-        installments: { orderBy: { installmentNumber: "asc" } },
-        payments: { orderBy: { createdAt: "desc" } },
-      },
+      include: CONTRACT_WITH_RELATIONS_INCLUDE,
     });
 
     if (!contract) {

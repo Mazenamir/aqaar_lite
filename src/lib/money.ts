@@ -58,7 +58,7 @@ export function formatSar(val: DecimalValue): string {
 
 /**
  * Split remaining balance into equal installments with exact penny allocation.
- * If there is a remainder from division, it is added to the last installment.
+ * If there is a remainder from division, it is added to the first installment.
  * Guarantees sum(installments) === (finalPrice - downPayment).
  */
 export function calculateInstallments(
@@ -89,9 +89,9 @@ export function calculateInstallments(
   const result: { installmentNumber: number; dueDate: Date; amount: Prisma.Decimal }[] = [];
 
   for (let i = 1; i <= count; i++) {
-    const isLast = i === count;
-    // Add remainder to the last installment
-    const installmentCents = isLast ? baseCents + remainderCents : baseCents;
+    const isFirst = i === 1;
+    // Add remainder to the first installment (aligned with InstallmentService and architectural invariant)
+    const installmentCents = isFirst ? baseCents + remainderCents : baseCents;
     const amount = new Prisma.Decimal(installmentCents.toString()).dividedBy(100);
 
     // Monthly due date
